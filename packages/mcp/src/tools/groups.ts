@@ -239,7 +239,7 @@ export const groupsDuplicate: ToolDefinition = {
 
 export const groupsDelete: ToolDefinition = {
   name: "sendsquared_groups_delete",
-  description: "Delete a SendSquared group or segment. Destructive — confirm with the user first.",
+  description: "Delete a SendSquared group or segment. Destructive — there is no undo.",
   inputSchema: {
     type: "object",
     required: ["id"],
@@ -349,7 +349,7 @@ export const groupsUnsetFolder: ToolDefinition = {
 
 export const groupsConditionConfig: ToolDefinition = {
   name: "sendsquared_groups_condition_config",
-  description: "List the available condition types, operators, and value types for SendSquared segments. Call this before building conditions to discover what the account supports.",
+  description: "List the available condition types, operators, and value types for SendSquared segments. Shows what the account supports for building conditions.",
   inputSchema: { type: "object", properties: {} },
   handler: async () => {
     const data = await apiForRequest().get("/groups/condition-config/")
@@ -381,7 +381,7 @@ const CONDITION_FORMAT_EXAMPLE = [
 
 export const groupsConditionFormat: ToolDefinition = {
   name: "sendsquared_groups_condition_format",
-  description: "Show the JSON format for segment conditions, including an example that combines multiple blocks and condition types. Call this when building conditions if you're unsure of the shape.",
+  description: "Show the JSON format for segment conditions, including an example that combines multiple blocks and condition types. Reference for the shape of segment conditions.",
   inputSchema: { type: "object", properties: {} },
   handler: async () => {
     const help = {

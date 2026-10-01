@@ -1,6 +1,6 @@
 {
   "name": "@sendsquared/mcp-server",
-  "version": "0.2.18",
+  "version": "0.2.19",
   "description": "SendSquared MCP server — remote HTTP MCP endpoint for Claude Code and claude.ai",
   "type": "module",
   "main": "./dist/index.js",

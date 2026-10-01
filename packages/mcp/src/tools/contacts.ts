@@ -174,7 +174,7 @@ export const contactsUpdate: ToolDefinition = {
 
 export const contactsDelete: ToolDefinition = {
   name: "sendsquared_contacts_delete",
-  description: "Delete a SendSquared contact by id. Destructive — confirm with the user first.",
+  description: "Delete a SendSquared contact by id. Destructive — there is no undo.",
   inputSchema: {
     type: "object",
     required: ["id"],
@@ -282,7 +282,7 @@ export const contactsTagAdd: ToolDefinition = {
     required: ["id", "tagId"],
     properties: {
       id: { type: "string", description: "Contact id" },
-      tagId: { type: "number", description: "Tag id to add (call sendsquared_tags_list for valid values)" },
+      tagId: { type: "number", description: "Tag id to add (valid values come from sendsquared_tags_list)" },
     },
   },
   handler: async (args) => {
@@ -372,7 +372,7 @@ export const contactsMerge: ToolDefinition = {
     "Merge two SendSquared contacts. The primary contact is kept and the secondary is removed; the " +
     "secondary's history folds into the primary. The surviving contact's field values default to the " +
     "primary contact's — pass any field below to override which value wins. " +
-    "Destructive — confirm with the user first.",
+    "Destructive — there is no undo.",
   inputSchema: {
     type: "object",
     required: ["primaryId", "secondaryId"],
@@ -448,9 +448,9 @@ export const contactsSendEmail: ToolDefinition = {
     "When template_id is given, the template is merged first: pass reservation_id (or " +
     "use_last_reservation) if it contains {{reservation.*}} tokens, and lead_id (or use_last_open_lead) " +
     "for {{lead.*}} tokens — an unsatisfiable token fails the merge with a 422. " +
-    "Preview with sendsquared_email_templates_merge_preview first if you want to check the copy. " +
-    "HIGH IMPACT — this delivers real email to a real person. Always confirm recipient, from-address, " +
-    "and final wording with the user before calling. The contact's primary email must be validated or " +
+    "sendsquared_email_templates_merge_preview renders the same merge without sending. " +
+    "High-impact: this delivers real email to a real person and cannot be recalled. " +
+    "The contact's primary email must be validated or " +
     "the API rejects the send.",
   inputSchema: {
     type: "object",

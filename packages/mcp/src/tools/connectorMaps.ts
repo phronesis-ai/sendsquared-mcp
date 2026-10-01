@@ -141,7 +141,7 @@ export const connectorMapsUpdate: ToolDefinition = {
 
 export const connectorMapsDelete: ToolDefinition = {
   name: "sendsquared_connector_maps_delete",
-  description: "Delete a SendSquared connector map. Destructive — confirm with the user first.",
+  description: "Delete a SendSquared connector map. Destructive — there is no undo.",
   inputSchema: {
     type: "object",
     required: ["id"],

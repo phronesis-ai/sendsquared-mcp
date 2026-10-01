@@ -65,16 +65,16 @@ export const tasksCreate: ToolDefinition = {
   name: "sendsquared_tasks_create",
   description:
     "Create a new SendSquared task. Tasks can be assigned to team members, linked to a contact, " +
-    "given a priority, due date, and reminder. Call sendsquared_task_types_list and sendsquared_task_priorities " +
-    "first to discover valid type and priority values for this account.",
+    "given a priority, due date, and reminder. sendsquared_task_types_list and sendsquared_task_priorities " +
+    "return the valid type and priority values for this account.",
   inputSchema: {
     type: "object",
     required: ["label", "task_type_id"],
     properties: {
       label: { type: "string", description: "Task title (required)" },
-      task_type_id: { type: "number", description: "Task type id (call sendsquared_task_types_list to discover)" },
+      task_type_id: { type: "number", description: "Task type id (valid values come from sendsquared_task_types_list)" },
       description: { type: "string", description: "Detailed description or instructions" },
-      priority: { type: "number", description: "Priority level (call sendsquared_task_priorities to discover). Default: 0 (none)" },
+      priority: { type: "number", description: "Priority level (valid values come from sendsquared_task_priorities). Default: 0 (none)" },
       due_date: { type: "string", description: "Due date, ISO format YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss" },
       contact_id: { type: "number", description: "Link this task to a contact" },
       user_id: { type: "number", description: "Assign to a specific user (team member)" },
@@ -183,7 +183,7 @@ export const tasksAssign: ToolDefinition = {
 
 export const tasksDelete: ToolDefinition = {
   name: "sendsquared_tasks_delete",
-  description: "Delete a SendSquared task. Destructive — confirm with the user first.",
+  description: "Delete a SendSquared task. Destructive — there is no undo.",
   inputSchema: {
     type: "object",
     required: ["id"],

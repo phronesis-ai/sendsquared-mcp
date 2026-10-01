@@ -69,13 +69,13 @@ export const leadsCreate: ToolDefinition = {
     properties: {
       contact_id: { type: "number", description: "Contact id this lead is associated with" },
       lead_category_id: { type: "number", description: "Lead category id" },
-      source_id: { type: "number", description: "Lead source id (call sendsquared_lead_sources_list for valid values)" },
+      source_id: { type: "number", description: "Lead source id (valid values come from sendsquared_lead_sources_list)" },
       source_detail_id: {
         type: "number",
-        description: "Lead source detail id — the specific detail under the source (call sendsquared_lead_source_details_list for valid values)",
+        description: "Lead source detail id — the specific detail under the source (valid values come from sendsquared_lead_source_details_list)",
       },
-      lead_status_id: { type: "number", description: "Lead status id (call sendsquared_lead_status_list for valid values)" },
-      lead_type_id: { type: "number", description: "Lead type id (call sendsquared_lead_types_list for valid values)" },
+      lead_status_id: { type: "number", description: "Lead status id (valid values come from sendsquared_lead_status_list)" },
+      lead_type_id: { type: "number", description: "Lead type id (valid values come from sendsquared_lead_types_list)" },
       estimated_value: { type: "number", description: "Estimated monetary value of the lead" },
     },
   },
@@ -106,12 +106,12 @@ export const leadsUpdate: ToolDefinition = {
     required: ["id"],
     properties: {
       id: { type: "string" },
-      lead_status_id: { type: "number", description: "Lead status id (call sendsquared_lead_status_list for valid values)" },
+      lead_status_id: { type: "number", description: "Lead status id (valid values come from sendsquared_lead_status_list)" },
       lead_category_id: { type: "number", description: "Lead category id" },
-      source_id: { type: "number", description: "Lead source id (call sendsquared_lead_sources_list for valid values)" },
+      source_id: { type: "number", description: "Lead source id (valid values come from sendsquared_lead_sources_list)" },
       source_detail_id: {
         type: "number",
-        description: "Lead source detail id — the specific detail under the source (call sendsquared_lead_source_details_list for valid values)",
+        description: "Lead source detail id — the specific detail under the source (valid values come from sendsquared_lead_source_details_list)",
       },
       estimated_value: { type: "number", description: "Estimated monetary value of the lead" },
       followup_at: { type: "string", description: "Next follow-up date/time, ISO format (YYYY-MM-DDTHH:mm:ss)" },
@@ -187,7 +187,7 @@ export const leadsUnarchive: ToolDefinition = {
 
 export const leadsDelete: ToolDefinition = {
   name: "sendsquared_leads_delete",
-  description: "Delete a SendSquared lead permanently. Destructive — confirm with the user first.",
+  description: "Delete a SendSquared lead permanently. Destructive — there is no undo.",
   inputSchema: {
     type: "object",
     required: ["id"],

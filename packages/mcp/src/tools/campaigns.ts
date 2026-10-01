@@ -335,7 +335,7 @@ export const campaignsCheck: ToolDefinition = {
 export const campaignsSend: ToolDefinition = {
   name: "sendsquared_campaigns_send",
   description:
-    "Send or schedule a campaign. Destructive / high-impact — confirm with the user first, showing the summary and group ids. " +
+    "Send or schedule a campaign. High-impact: delivers real messages to every contact in the campaign's groups. " +
     "send_at is ISO 8601 or \"now\" (required unless a future send time is already set). The audience is built 30 minutes " +
     "before the send time; after that it cannot be pulled back.",
   inputSchema: {
@@ -473,7 +473,7 @@ export const campaignsArchive: ToolDefinition = {
 
 export const campaignsDelete: ToolDefinition = {
   name: "sendsquared_campaigns_delete",
-  description: "Delete a draft campaign. Destructive — confirm with the user first.",
+  description: "Delete a draft campaign. Destructive — there is no undo.",
   inputSchema: {
     type: "object",
     required: ["id"],

@@ -119,7 +119,7 @@ export const reportsRun: ToolDefinition = {
   description:
     "Run any report type with the filters the web app's Reports screen sends. Most types need from/to; " +
     "automation_* and trigger_* need workflow_id; survey_responses needs survey_id; contact_journey needs " +
-    "workflow_id and contact_id. Call sendsquared_reports_types to see what exists.",
+    "workflow_id and contact_id. sendsquared_reports_types lists the available types.",
   inputSchema: {
     type: "object",
     required: ["type"],

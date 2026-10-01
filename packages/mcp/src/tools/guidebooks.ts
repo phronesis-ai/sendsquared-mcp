@@ -32,9 +32,9 @@ export const guidebooksGet: ToolDefinition = {
   description:
     "Fetch a single SendSquared guidebook by id, including all its blocks and their assets. " +
     "The block content embedded in this response can lag behind recent edits — the backend caches the embedded " +
-    "block payload independently of the underlying block records. If you need authoritative content for a specific " +
-    "block (e.g. to verify an update), fetch the block directly with sendsquared_guidebook_blocks_get instead of " +
-    "trusting the embedded copy here. The block ORDER in the returned array IS authoritative for this guidebook " +
+    "block payload independently of the underlying block records. The authoritative content for a specific " +
+    "block (e.g. to verify an update) is what sendsquared_guidebook_blocks_get returns, not the embedded " +
+    "copy here. The block ORDER in the returned array IS authoritative for this guidebook " +
     "(it reflects the per-guidebook render order set by sendsquared_guidebooks_reorder_blocks).",
   inputSchema: {
     type: "object",
@@ -387,7 +387,7 @@ export const guidebooksDuplicate: ToolDefinition = {
 
 export const guidebooksDelete: ToolDefinition = {
   name: "sendsquared_guidebooks_delete",
-  description: "Delete a SendSquared guidebook. Destructive — confirm with the user first.",
+  description: "Delete a SendSquared guidebook. Destructive — there is no undo.",
   inputSchema: {
     type: "object",
     required: ["id"],
@@ -839,7 +839,7 @@ export const guidebookBlocksUpdate: ToolDefinition = {
 
 export const guidebookBlocksDelete: ToolDefinition = {
   name: "sendsquared_guidebook_blocks_delete",
-  description: "Delete a guidebook block. Destructive — confirm with the user first.",
+  description: "Delete a guidebook block. Destructive — there is no undo.",
   inputSchema: {
     type: "object",
     required: ["id"],
@@ -1196,7 +1196,7 @@ export const guidebookThemesUpdate: ToolDefinition = {
 
 export const guidebookThemesDelete: ToolDefinition = {
   name: "sendsquared_guidebook_themes_delete",
-  description: "Delete a guidebook theme. Destructive — guidebooks referencing it lose their theme. Confirm with the user first.",
+  description: "Delete a guidebook theme. Destructive — guidebooks referencing it lose their theme, and there is no undo.",
   inputSchema: {
     type: "object",
     required: ["id"],
@@ -1234,7 +1234,7 @@ export const guidebooksConditionsGet: ToolDefinition = {
   name: "sendsquared_guidebooks_conditions_get",
   description:
     "Get the visibility conditions for a guidebook. Conditions decide which guests see the guidebook. " +
-    "Always call this before sendsquared_guidebooks_conditions_set — that call replaces the entire set.",
+    "sendsquared_guidebooks_conditions_set replaces the entire set, so this is the list to resend from.",
   inputSchema: {
     type: "object",
     required: ["guidebookId"],
@@ -1251,8 +1251,8 @@ export const guidebooksConditionsSet: ToolDefinition = {
   name: "sendsquared_guidebooks_conditions_set",
   description:
     "Replace a guidebook's visibility conditions. REPLACES the whole set — any existing condition not " +
-    "included in this call is deleted. Read sendsquared_guidebooks_conditions_get first and resend " +
-    "the conditions you want to keep.",
+    "included in this call is deleted. sendsquared_guidebooks_conditions_get returns the current set " +
+    "to resend from.",
   inputSchema: {
     type: "object",
     required: ["guidebookId", "conditions"],
@@ -1282,8 +1282,8 @@ export const guidebooksConditionsSet: ToolDefinition = {
 export const guidebookBlocksConditionsGet: ToolDefinition = {
   name: "sendsquared_guidebook_blocks_conditions_get",
   description:
-    "Get the visibility conditions for a single guidebook block. Always call this before " +
-    "sendsquared_guidebook_blocks_conditions_set — that call replaces the entire set.",
+    "Get the visibility conditions for a single guidebook block. " +
+    "sendsquared_guidebook_blocks_conditions_set replaces the entire set, so this is the list to resend from.",
   inputSchema: {
     type: "object",
     required: ["blockId"],
@@ -1300,7 +1300,7 @@ export const guidebookBlocksConditionsSet: ToolDefinition = {
   name: "sendsquared_guidebook_blocks_conditions_set",
   description:
     "Replace a guidebook block's visibility conditions. REPLACES the whole set — any existing " +
-    "condition not included is deleted. Read the current set first and resend what you want to keep.",
+    "condition not included is deleted. sendsquared_guidebook_blocks_conditions_get returns the current set to resend from.",
   inputSchema: {
     type: "object",
     required: ["blockId", "conditions"],
@@ -1330,8 +1330,8 @@ export const guidebookBlocksConditionsSet: ToolDefinition = {
 export const guidebookBlocksGuidebooksGet: ToolDefinition = {
   name: "sendsquared_guidebook_blocks_guidebooks_get",
   description:
-    "List the guidebook ids a block is attached to. Blocks are reusable, so use this before editing " +
-    "a block to see everywhere the edit will land.",
+    "List the guidebook ids a block is attached to. Blocks are reusable, so this shows " +
+    "everywhere an edit to the block will land.",
   inputSchema: {
     type: "object",
     required: ["blockId"],
@@ -1351,8 +1351,8 @@ export const guidebookBlocksGuidebooksSet: ToolDefinition = {
   name: "sendsquared_guidebook_blocks_guidebooks_set",
   description:
     "Set exactly which guidebooks a block belongs to. REPLACES the block's whole membership list — " +
-    "guidebooks omitted here lose the block. To add without removing, read the current list first " +
-    "and send it back with your additions, or use sendsquared_guidebooks_add_blocks instead.",
+    "guidebooks omitted here lose the block. sendsquared_guidebook_blocks_guidebooks_get returns the current " +
+    "list, and sendsquared_guidebooks_add_blocks adds without removing.",
   inputSchema: {
     type: "object",
     required: ["blockId", "guidebookIds"],
@@ -1566,7 +1566,7 @@ export const reportsGuidebookOverview: ToolDefinition = {
   name: "sendsquared_reports_guidebook_overview",
   description:
     "Headline guidebook engagement numbers for a date range: loads, unique guests, signed legal terms, " +
-    "vehicle registrations, and per-day trend. Start here before drilling into sendsquared_reports_guidebook.",
+    "vehicle registrations, and per-day trend. sendsquared_reports_guidebook has the per-report detail.",
   inputSchema: { type: "object", required: ["from", "to"], properties: REPORT_PARAM_SCHEMA },
   handler: async (args) => {
     const data = await apiForRequest().post("/reports/guidebook-analytics/overview", guidebookReportBody(args))
@@ -1644,7 +1644,7 @@ export const contactsLegalAcceptancePartyMembersSet: ToolDefinition = {
   name: "sendsquared_contacts_legal_acceptance_party_members_set",
   description:
     "Replace the party-member names recorded on one legal acceptance. This REPLACES the whole list — names you " +
-    "omit are removed. Fetch the current list with sendsquared_contacts_legal_acceptances_list first.",
+    "omit are removed. sendsquared_contacts_legal_acceptances_list returns the current list.",
   inputSchema: {
     type: "object",
     required: ["contactId", "acceptanceId", "party_members"],
@@ -1682,8 +1682,8 @@ export const contactsVehiclesSet: ToolDefinition = {
   name: "sendsquared_contacts_vehicles_set",
   description:
     "Replace the vehicles registered for a contact on one reservation and vehicleInfo block. This REPLACES the " +
-    "set for that reservation/block pair — vehicles you omit are removed. Read the current list with " +
-    "sendsquared_contacts_vehicles_list first.",
+    "set for that reservation/block pair — vehicles you omit are removed. " +
+    "sendsquared_contacts_vehicles_list returns the current list.",
   inputSchema: {
     type: "object",
     required: ["contactId", "reservation_id", "guidebook_block_id", "vehicles"],

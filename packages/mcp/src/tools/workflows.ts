@@ -74,7 +74,7 @@ export const workflowsGet: ToolDefinition = {
 
 export const workflowsCreate: ToolDefinition = {
   name: "sendsquared_workflows_create",
-  description: "Create a SendSquared workflow with a trigger and an array of action steps. Steps are a flat array that gets converted into a nested action tree; use 'children' on a step to express branching. Time-based triggers (trigger_type time_based or gap_night) REQUIRE syncInterval — the API rejects them without it. Call sendsquared_workflows_step_format first if you need the step JSON schema.",
+  description: "Create a SendSquared workflow with a trigger and an array of action steps. Steps are a flat array that gets converted into a nested action tree; use 'children' on a step to express branching. Time-based triggers (trigger_type time_based or gap_night) REQUIRE syncInterval — the API rejects them without it. sendsquared_workflows_step_format returns the step JSON schema.",
   inputSchema: {
     type: "object",
     required: ["name"],
@@ -342,10 +342,9 @@ export const workflowsRunExisting: ToolDefinition = {
   description:
     "Run a workflow against contacts who are ALREADY in its trigger group or segment — i.e. process " +
     "historical members. High-impact and irreversible: it can fire emails/SMS to a large audience at " +
-    "once. ALWAYS confirm with the user first, and DO NOT use it on survey-triggered workflows or any " +
-    "workflow where re-processing historical members would re-send to people who already completed " +
-    "the journey (e.g. every past survey respondent). Only use it right after activating a brand-new " +
-    "workflow when the user explicitly wants existing members enrolled.",
+    "once. On a survey-triggered workflow, or any workflow whose historical members already completed " +
+    "the journey, it re-sends to all of them (e.g. every past survey respondent). It exists for " +
+    "enrolling existing members right after a brand-new workflow is activated.",
   inputSchema: {
     type: "object",
     required: ["id"],
@@ -362,7 +361,7 @@ export const workflowsRunExisting: ToolDefinition = {
 
 export const workflowsDelete: ToolDefinition = {
   name: "sendsquared_workflows_delete",
-  description: "Delete a SendSquared workflow. Destructive — confirm with the user first.",
+  description: "Delete a SendSquared workflow. Destructive — there is no undo.",
   inputSchema: {
     type: "object",
     required: ["id"],
@@ -445,7 +444,7 @@ const STEP_FORMAT_EXAMPLE = [
 
 export const workflowsStepFormat: ToolDefinition = {
   name: "sendsquared_workflows_step_format",
-  description: "Show the JSON format for workflow steps, including an example 6-month drip with branching and a conditional follow-up. Call this before building a workflow if you're unsure of the shape.",
+  description: "Show the JSON format for workflow steps, including an example 6-month drip with branching and a conditional follow-up. Reference for the shape of workflow steps.",
   inputSchema: { type: "object", properties: {} },
   handler: async () => {
     const help = {

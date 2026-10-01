@@ -70,7 +70,7 @@ export const tagsUpdate: ToolDefinition = {
 
 export const tagsDelete: ToolDefinition = {
   name: "sendsquared_tags_delete",
-  description: "Delete a SendSquared tag. Destructive — confirm with the user first.",
+  description: "Delete a SendSquared tag. Destructive — there is no undo.",
   inputSchema: {
     type: "object",
     required: ["id"],

@@ -146,7 +146,7 @@ export function buildTaxonomyTools(resource: TaxonomyToolResource): ToolDefiniti
 
   const del: ToolDefinition = {
     name: `${prefix}_delete`,
-    description: `Delete a SendSquared ${label} entry. Destructive — confirm with the user first.`,
+    description: `Delete a SendSquared ${label} entry. Destructive — there is no undo.`,
     inputSchema: { type: "object", required: ["id"], properties: { id: { type: "string" } } },
     handler: async (args) => {
       const id = asString(args["id"], "id")

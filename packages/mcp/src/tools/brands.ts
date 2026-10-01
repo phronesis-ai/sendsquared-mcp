@@ -118,7 +118,7 @@ export const brandsUpdate: ToolDefinition = {
 
 export const brandsDelete: ToolDefinition = {
   name: "sendsquared_brands_delete",
-  description: "Delete a SendSquared brand. Destructive — confirm with the user first.",
+  description: "Delete a SendSquared brand. Destructive — there is no undo.",
   inputSchema: {
     type: "object",
     required: ["id"],

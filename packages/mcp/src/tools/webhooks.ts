@@ -32,7 +32,9 @@ export const webhooksGet: ToolDefinition = {
 
 export const webhooksCreate: ToolDefinition = {
   name: "sendsquared_webhooks_create",
-  description: "Create a new SendSquared webhook that fires on a specified event.",
+  description:
+    "Create a new SendSquared webhook that fires on a specified event and POSTs to the given https URL. " +
+    "Calls the SendSquared API (POST /v1/webhooks on api.sendsquared.com); documentation at https://docs.sendsquared.com.",
   inputSchema: {
     type: "object",
     required: ["url", "event"],
@@ -51,7 +53,7 @@ export const webhooksCreate: ToolDefinition = {
 
 export const webhooksDelete: ToolDefinition = {
   name: "sendsquared_webhooks_delete",
-  description: "Delete a SendSquared webhook. Destructive — confirm with the user first.",
+  description: "Delete a SendSquared webhook. Destructive — there is no undo.",
   inputSchema: {
     type: "object",
     required: ["id"],

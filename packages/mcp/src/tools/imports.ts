@@ -49,8 +49,8 @@ export const importsUpload: ToolDefinition = {
   name: "sendsquared_imports_upload",
   description:
     "Upload CSV text for a contact import. Nothing is imported yet: this returns a stored_file_name, the first " +
-    "few rows, and a suggested column mapping. Review the mapping with the user (unmatched columns are 'skip'), " +
-    "then call sendsquared_imports_start. The first CSV row is treated as a header and is never imported.",
+    "few rows, and a suggested column mapping. Unmatched columns are suggested as 'skip'. " +
+    "sendsquared_imports_start takes the stored_file_name and the final mapping. The first CSV row is treated as a header and is never imported.",
   inputSchema: {
     type: "object",
     required: ["csv"],
@@ -91,7 +91,7 @@ export const importsStart: ToolDefinition = {
     "Start a contact import from a file uploaded with sendsquared_imports_upload. Pass one column target per CSV " +
     "column in order, and exactly one of new_group_name or group_id; every imported contact is added to that group. " +
     "Contacts that already exist are counted as duplicates and left alone unless the duplicate_* flags say " +
-    "otherwise. Confirm the mapping and flags with the user first — the import cannot be undone.",
+    "otherwise. The import cannot be undone.",
   inputSchema: {
     type: "object",
     required: ["stored_file_name", "columns"],

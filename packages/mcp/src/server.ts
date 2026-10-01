@@ -57,7 +57,7 @@ const TOOL_BY_NAME = new Map(ALL_TOOLS.map((t) => [t.name, t]))
 
 export function buildMcpServer(): Server {
   const server = new Server(
-    { name: "sendsquared", version: "0.2.18" },
+    { name: "sendsquared", version: "0.2.19" },
     { capabilities: { tools: {}, resources: {}, prompts: {} } },
   )
 

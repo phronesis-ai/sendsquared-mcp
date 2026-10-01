@@ -331,7 +331,7 @@ export const surveysCreate: ToolDefinition = {
   name: "sendsquared_surveys_create",
   description:
     "Create a new SendSquared survey with its questions. Requires a name, a send_method, a from_id " +
-    "(a verified email id for send_method=email, or a phone number id for sms), a template_id (call " +
+    "(a verified email id for send_method=email, or a phone number id for sms), a template_id (from " +
     "sendsquared_email_templates_list) and at least one question. New surveys default to inactive " +
     "unless you pass active=true.",
   inputSchema: {
@@ -391,7 +391,7 @@ export const surveysUpdate: ToolDefinition = {
     "first and everything else is carried forward, including its questions. Passing 'questions' " +
     "replaces the entire question list: questions you omit are deleted, and questions you include " +
     "without an id are created, so include each existing question's id (and each option's id) to " +
-    "keep it. For single-question edits prefer sendsquared_surveys_questions_update.",
+    "keep it. sendsquared_surveys_questions_update edits one question without resending the rest.",
   inputSchema: {
     type: "object",
     required: ["id"],
@@ -508,8 +508,9 @@ export const surveysQuestionsUpdate: ToolDefinition = {
 export const surveysQuestionsRemove: ToolDefinition = {
   name: "sendsquared_surveys_questions_remove",
   description:
-    "Remove one question from a SendSquared survey. The question and its recorded answers are " +
-    "deleted and the remaining questions are renumbered. Destructive — confirm with the user first.",
+    "Remove one question from a SendSquared survey. This is a soft delete: the question is retired, " +
+    "its recorded answers stay in historical reports, and the remaining questions are renumbered. " +
+    "Guests stop seeing the question.",
   inputSchema: {
     type: "object",
     required: ["id", "question_id"],
@@ -658,7 +659,7 @@ export const surveysAssign: ToolDefinition = {
   name: "sendsquared_surveys_assign",
   description:
     "Assign a survey to a contact, minting the response token used in the survey link. Use this to " +
-    "send a survey to one person outside a workflow. Sends to the contact — confirm with the user first.",
+    "send a survey to one person outside a workflow. The survey is delivered to the contact.",
   inputSchema: {
     type: "object",
     required: ["id", "contact_id"],
@@ -889,7 +890,7 @@ export const contactSurveysCancel: ToolDefinition = {
   name: "sendsquared_contact_surveys_cancel",
   description:
     "Cancel a contact's pending survey assignment so it is no longer sent or answerable. Destructive — " +
-    "confirm with the user first.",
+    "there is no undo.",
   inputSchema: {
     type: "object",
     required: ["id"],

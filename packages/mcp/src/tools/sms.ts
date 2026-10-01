@@ -3,7 +3,7 @@ import type { ToolDefinition } from "./types.js"
 
 export const smsSend: ToolDefinition = {
   name: "sendsquared_sms_send",
-  description: "Send a single SMS message to a SendSquared contact. High-impact — confirm with the user first, especially if the message will go to multiple recipients via a campaign.",
+  description: "Send a single SMS message to a SendSquared contact. High-impact: delivers a real text message that cannot be recalled.",
   inputSchema: {
     type: "object",
     required: ["contactId", "message"],

@@ -122,7 +122,7 @@ export const foldersRename: ToolDefinition = {
 export const foldersDelete: ToolDefinition = {
   name: "sendsquared_folders_delete",
   description:
-    "Delete a folder. Templates inside it are NOT deleted — they are unfiled and remain available. Child folders are not removed; move or delete them first if you want a clean tree.",
+    "Delete a folder. Templates inside it are NOT deleted — they are unfiled and remain available. Child folders are not removed and stay where they are.",
   inputSchema: {
     type: "object",
     required: ["id"],

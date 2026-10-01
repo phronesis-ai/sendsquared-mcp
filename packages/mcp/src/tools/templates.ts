@@ -171,7 +171,7 @@ export const emailTemplatesCreate: ToolDefinition = {
   name: "sendsquared_email_templates_create",
   description:
     "Create a SendSquared email template using Stripo-compatible HTML. " +
-    "BEFORE calling this tool, read TWO resources: sendsquared://stripo-reference (the exact HTML markup " +
+    "The required markup is documented in two resources: sendsquared://stripo-reference (the exact HTML markup " +
     "patterns — document skeleton, content sections, block types, padding classes, footer) and " +
     "sendsquared://merge-tokens (the ~180 available merge tokens and the five special URLs for guidebooks " +
     "on ssqgo.com, surveys on sndsq.com, unsubscribe, manage preferences, and campaign archive). " +
@@ -179,7 +179,7 @@ export const emailTemplatesCreate: ToolDefinition = {
     "nesting pattern: es-content > esd-stripe > es-content-body[600] > esd-structure > esd-container-frame > esd-block-*. " +
     "Each visual row must be a separate es-content section. All styles must be inline. " +
     "Include the es-footer section with the correct unsubscribe and manage-preferences URLs. " +
-    "Do NOT add a SendSquared logo. This tool runs the full 3-step Stripo flow.",
+    "A SendSquared logo is not part of the template. This tool runs the full 3-step Stripo flow.",
   inputSchema: {
     type: "object",
     required: ["name", "subject", "html"],
@@ -213,8 +213,8 @@ export const emailTemplatesReadContent: ToolDefinition = {
   description:
     "Read the full Stripo HTML content of an email template. The standard `sendsquared_email_templates_get` " +
     "returns only the metadata record (name, subject, etc.); the HTML body lives in S3 and must be fetched " +
-    "via a short-lived signed URL. Use this tool whenever you need to inspect or edit the actual markup — " +
-    "for example, before calling `sendsquared_email_templates_update` to modify the HTML.",
+    "via a short-lived signed URL. This is the tool that returns the actual markup, for example as the " +
+    "starting point for a `sendsquared_email_templates_update` edit.",
   inputSchema: {
     type: "object",
     required: ["id"],
@@ -249,9 +249,9 @@ export const emailTemplatesUpdate: ToolDefinition = {
     "preview, and/or html. The current record is fetched first and missing fields are preserved. " +
     "When `html` is provided, the tool runs the full Stripo 3-step update flow: PUT metadata → upload HTML to " +
     "the returned signed S3 URL → PUT /complete to regenerate the thumbnail and parse merge tokens. " +
-    "If you're updating HTML, read BOTH sendsquared://stripo-reference (markup patterns) AND " +
-    "sendsquared://merge-tokens (available tokens and the guidebook/survey/unsubscribe special URLs) first. " +
-    "Use `sendsquared_email_templates_read_content` first to see the current HTML if you want to make a " +
+    "The markup rules for `html` are documented in sendsquared://stripo-reference (markup patterns) and " +
+    "sendsquared://merge-tokens (available tokens and the guidebook/survey/unsubscribe special URLs). " +
+    "`sendsquared_email_templates_read_content` returns the current HTML, which is the starting point for a " +
     "targeted edit rather than replacing the whole body.",
   inputSchema: {
     type: "object",
@@ -524,7 +524,7 @@ export const emailTemplatesSetBrand: ToolDefinition = {
   name: "sendsquared_email_templates_set_brand",
   description:
     "Assign an email template to a brand, or pass brand_id omitted/null to clear it. " +
-    "Call sendsquared_brands_list for valid brand ids.",
+    "Valid brand ids come from sendsquared_brands_list.",
   inputSchema: {
     type: "object",
     required: ["id"],
@@ -615,7 +615,7 @@ export const emailTemplatesSendTest: ToolDefinition = {
     "Send a TEST copy of an email template to one or more raw email addresses. The API duplicates the " +
     "template as a system template, prefixes the subject with '[TEST]', and creates a demo contact per " +
     "recipient — so this is a proofing tool, NOT a way to send real mail to a customer. High-impact: it " +
-    "does deliver actual email. Confirm the recipient list with the user first.",
+    "does deliver actual email to every address given.",
   inputSchema: {
     type: "object",
     required: ["id", "email", "fromAddressId"],
@@ -693,8 +693,8 @@ export const emailTemplatesMergePreview: ToolDefinition = {
   description:
     "Resolve an email template's merge tokens against a real contact (and optionally a reservation or " +
     "lead) and return the finished subject and HTML WITHOUT sending. Use this to preview what a contact " +
-    "would actually receive, and to check a template's tokens can be satisfied before calling " +
-    "sendsquared_contacts_send_email. A template containing {{reservation.*}} tokens needs a " +
+    "would actually receive, and to check a template's tokens can be satisfied ahead of a " +
+    "sendsquared_contacts_send_email send. A template containing {{reservation.*}} tokens needs a " +
     "reservation_id (or use_last_reservation), and {{lead.*}} tokens need a lead_id (or " +
     "use_last_open_lead), or the merge fails with a 422 naming the line that broke.",
   inputSchema: {

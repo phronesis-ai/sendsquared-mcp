@@ -89,7 +89,7 @@ export const notesUpdate: ToolDefinition = {
 
 export const notesDelete: ToolDefinition = {
   name: "sendsquared_notes_delete",
-  description: "Delete a note. Destructive — confirm with the user first.",
+  description: "Delete a note. Destructive — there is no undo.",
   inputSchema: {
     type: "object",
     required: ["id"],
