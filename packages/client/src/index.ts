@@ -1,6 +1,6 @@
 export { request, createClient } from "./request.js"
 export type { Client, ClientContext, PageResult, QueryParams, QueryValue } from "./request.js"
-export { loginPassword, loginOtp, refreshAuthToken } from "./auth.js"
+export { loginPassword, loginOtp, refreshAuthToken, LoginError } from "./auth.js"
 export type { LoginResult, LoginSession, MfaChallenge } from "./auth.js"
 export {
   parseConditions,

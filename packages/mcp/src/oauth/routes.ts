@@ -11,15 +11,18 @@ import {
   generateCsrfToken,
   clientCount,
 } from "./store.js"
-import { renderConsentPage, renderErrorPage } from "./consent.js"
+import { loginPassword, loginOtp, LoginError } from "@sendsquared/client"
+import { renderConsentPage, renderOtpPage, renderErrorPage, type ConsentParams } from "./consent.js"
 
 const SENDSQUARED_API_URL = process.env["SENDSQUARED_API_URL"] ?? "https://api.sendsquared.com"
 
 /*
   OAuth 2.1 + PKCE flow with security hardening:
 
-    - redirect_uri allowlist: only claude.ai, anthropic.com, and localhost are
-      permitted as redirect targets. Prevents code-theft via malicious clients.
+    - redirect_uri allowlist: only the assistant platforms the connector is
+      listed on (Claude, ChatGPT), localhost, and any origin named in
+      OAUTH_EXTRA_REDIRECT_ORIGINS are permitted as redirect targets. Prevents
+      code-theft via malicious clients.
     - CSRF on /authorize/submit: the consent page embeds a random token as a
       hidden field; the submit handler validates it matches what was stored when
       the page was rendered. Prevents cross-site form submission.
@@ -34,14 +37,33 @@ const ALLOWED_REDIRECT_PATTERNS = [
   /^https:\/\/claude\.ai(\/|$)/,
   /^https:\/\/[a-z0-9-]+\.claude\.ai(\/|$)/,
   /^https:\/\/[a-z0-9-]+\.anthropic\.com(\/|$)/,
+  /^https:\/\/chatgpt\.com(\/|$)/,
+  /^https:\/\/[a-z0-9-]+\.chatgpt\.com(\/|$)/,
+  /^https:\/\/[a-z0-9-]+\.openai\.com(\/|$)/,
   /^http:\/\/localhost(:\d+)?(\/|$)/,
   /^http:\/\/127\.0\.0\.1(:\d+)?(\/|$)/,
 ]
 
 const MAX_REGISTERED_CLIENTS = 500
 
+/*
+  Other assistant platforms redirect to origins that are only known once they
+  first try to register, so they are added by config rather than a deploy:
+  OAUTH_EXTRA_REDIRECT_ORIGINS is a comma-separated list of exact https
+  origins. Rejected URIs are logged so the origin to add is visible.
+*/
+function extraRedirectOrigins(): string[] {
+  return (process.env["OAUTH_EXTRA_REDIRECT_ORIGINS"] ?? "")
+    .split(",")
+    .map((o) => o.trim().replace(/\/$/, ""))
+    .filter((o) => o.startsWith("https://"))
+}
+
 function isRedirectUriAllowed(uri: string): boolean {
-  return ALLOWED_REDIRECT_PATTERNS.some((pattern) => pattern.test(uri))
+  if (ALLOWED_REDIRECT_PATTERNS.some((pattern) => pattern.test(uri))) {
+    return true
+  }
+  return extraRedirectOrigins().some((origin) => uri === origin || uri.startsWith(`${origin}/`))
 }
 
 interface ProfileLookup {
@@ -158,6 +180,7 @@ oauthRouter.post("/register", registrationLimiter, (req, res) => {
       return
     }
     if (!isRedirectUriAllowed(uri)) {
+      console.log(`[oauth] register rejected redirect_uri=${uri}`)
       jsonError(
         res,
         400,
@@ -219,7 +242,7 @@ oauthRouter.get("/authorize", authorizeLimiter, (req, res) => {
 
   const client = getClient(client_id)
   if (!client) {
-    htmlError(res, 400, "Unknown client_id. The OAuth client may have been registered against a previous deployment of this server. Remove and re-add the connector in claude.ai to register a fresh client.")
+    htmlError(res, 400, "Unknown client_id. The OAuth client may have been registered against a previous deployment of this server. Remove and re-add the SendSquared connector in your assistant to register a fresh client.")
     return
   }
   if (!client.redirect_uris.includes(redirect_uri)) {
@@ -269,68 +292,213 @@ function parsePastedToken(raw: string): { jwt: string; refreshToken: string | nu
   return { jwt: trimmed, refreshToken: null }
 }
 
-oauthRouter.post("/authorize/submit", async (req, res) => {
-  console.log(`[oauth] POST /authorize/submit content-type=${req.headers["content-type"]} body_keys=${Object.keys(req.body ?? {}).join(",")}`)
-  const body = (req.body ?? {}) as Record<string, unknown>
-  const client_id = String(body["client_id"] ?? "")
-  const redirect_uri = String(body["redirect_uri"] ?? "")
-  const state = String(body["state"] ?? "")
-  const code_challenge = String(body["code_challenge"] ?? "")
-  const scope = String(body["scope"] ?? "mcp")
-  const pasted = String(body["jwt"] ?? "")
-  const csrf_token = String(body["csrf_token"] ?? "")
+interface AuthorizeRequest {
+  client_id: string
+  redirect_uri: string
+  state: string
+  code_challenge: string
+  scope: string
+  csrf_token: string
+}
 
-  const csrfValid = csrf_token.length > 0 && consumeCsrfToken(csrf_token)
+function authorizeRequestFrom(body: Record<string, unknown>): AuthorizeRequest {
+  return {
+    client_id: String(body["client_id"] ?? ""),
+    redirect_uri: String(body["redirect_uri"] ?? ""),
+    state: String(body["state"] ?? ""),
+    code_challenge: String(body["code_challenge"] ?? ""),
+    scope: String(body["scope"] ?? "mcp"),
+    csrf_token: String(body["csrf_token"] ?? ""),
+  }
+}
+
+/*
+  Every form post on the sign-in pages goes through the same gate: a single
+  use CSRF token, then the client and redirect checks. A retry (wrong
+  password, wrong code) is answered with a freshly rendered page carrying a
+  new CSRF token rather than a dead-end error.
+*/
+function authorizeGate(req: AuthorizeRequest, res: Response): ConsentParams | undefined {
+  const csrfValid = req.csrf_token.length > 0 && consumeCsrfToken(req.csrf_token)
   if (!csrfValid) {
-    console.log(`[oauth] CSRF check failed. token_length=${csrf_token.length} map_size=${csrfTokens.size}`)
+    console.log(`[oauth] CSRF check failed. token_length=${req.csrf_token.length} map_size=${csrfTokens.size}`)
     htmlError(res, 403, "Session expired. Please close this window and reconnect the SendSquared connector.")
-    return
+    return undefined
   }
-
-  const parsed = parsePastedToken(pasted)
-  if (!client_id || !redirect_uri || !code_challenge || !parsed) {
-    htmlError(res, 400, "Missing or unparseable token. Paste either a raw JWT or the JSON output from `sendsquared auth connector-token`.")
-    return
+  if (!req.client_id || !req.redirect_uri || !req.code_challenge) {
+    htmlError(res, 400, "Missing required OAuth parameters.")
+    return undefined
   }
-  const { jwt, refreshToken } = parsed
-
-  const client = getClient(client_id)
+  const client = getClient(req.client_id)
   if (!client) {
     htmlError(res, 400, "Unknown client_id.")
-    return
+    return undefined
   }
-  if (!client.redirect_uris.includes(redirect_uri)) {
+  if (!client.redirect_uris.includes(req.redirect_uri)) {
     htmlError(res, 400, "redirect_uri mismatch.")
-    return
+    return undefined
   }
-  if (!isRedirectUriAllowed(redirect_uri)) {
+  if (!isRedirectUriAllowed(req.redirect_uri)) {
     htmlError(res, 400, "redirect_uri is not in the server's allowlist.")
+    return undefined
+  }
+  return {
+    client,
+    redirect_uri: req.redirect_uri,
+    state: req.state,
+    code_challenge: req.code_challenge,
+    scope: req.scope,
+    csrf_token: issueCsrfToken(),
+  }
+}
+
+interface SignedIn {
+  jwt: string
+  refreshToken: string | null
+  user_email: string
+  user_id: string
+}
+
+function redirectWithCode(res: Response, req: AuthorizeRequest, signedIn: SignedIn): void {
+  const code = issueAuthorizationCode({
+    client_id: req.client_id,
+    redirect_uri: req.redirect_uri,
+    code_challenge: req.code_challenge,
+    scope: req.scope,
+    jwt: signedIn.jwt,
+    refresh_token: signedIn.refreshToken,
+    user_email: signedIn.user_email,
+    user_id: signedIn.user_id,
+    csrf_token: req.csrf_token,
+  })
+  const url = new URL(req.redirect_uri)
+  url.searchParams.set("code", code)
+  if (req.state) url.searchParams.set("state", req.state)
+  res.redirect(302, url.toString())
+}
+
+function sendPage(res: Response, status: number, html: string): void {
+  setSecurityHeaders(res)
+  res.status(status).type("html").send(html)
+}
+
+/*
+  A 4xx from the login API is the user's input being wrong; anything else
+  (5xx, network failure) is the API being unavailable, and telling the user
+  their password is wrong then would send them off to reset it for nothing.
+*/
+function signInFailure(err: unknown, rejected: string): { status: number; message: string; detail: string } {
+  const detail = err instanceof Error ? err.message : String(err)
+  if (err instanceof LoginError && err.status >= 400 && err.status < 500) {
+    return { status: 401, message: rejected, detail }
+  }
+  return { status: 502, message: "SendSquared sign-in isn't available right now. Please try again in a few minutes.", detail }
+}
+
+const signInLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 10,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  skip: () => SKIP_RATE_LIMIT,
+  message: { error: "too_many_requests", error_description: "Too many sign-in attempts. Wait a minute and try again." },
+})
+
+/*
+  Two ways in: an email and password, which this server exchanges for a
+  SendSquared session through the same login the web app uses (with a code
+  step when the account has two-step sign-in), or a token pasted from the
+  CLI. The password only passes through to the API; it is never logged or
+  kept, and the request log records field names, not values.
+*/
+oauthRouter.post("/authorize/submit", signInLimiter, async (req, res) => {
+  console.log(`[oauth] POST /authorize/submit content-type=${req.headers["content-type"]} body_keys=${Object.keys(req.body ?? {}).join(",")}`)
+  const body = (req.body ?? {}) as Record<string, unknown>
+  const request = authorizeRequestFrom(body)
+  const page = authorizeGate(request, res)
+  if (!page) {
     return
   }
 
-  const profile = await lookupProfile(jwt)
+  const username = String(body["username"] ?? "").trim()
+  const password = String(body["password"] ?? "")
+  if (username.length > 0 || password.length > 0) {
+    if (username.length === 0 || password.length === 0) {
+      sendPage(res, 400, renderConsentPage({ ...page, username, error: "Enter both your email and password." }))
+      return
+    }
+    let result
+    try {
+      result = await loginPassword(SENDSQUARED_API_URL, username, password)
+    } catch (err) {
+      const failure = signInFailure(err, "That email and password didn't work. Check them and try again.")
+      console.log(`[oauth] password sign-in failed: ${failure.detail}`)
+      sendPage(res, failure.status, renderConsentPage({ ...page, username, error: failure.message }))
+      return
+    }
+    switch (result.kind) {
+      case "mfa":
+        sendPage(res, 200, renderOtpPage({ ...page, challenge_id: result.challenge.id, method: result.challenge.method }))
+        return
+      case "ok":
+        redirectWithCode(res, request, {
+          jwt: result.session.jwt,
+          refreshToken: result.session.refreshToken || null,
+          user_email: result.session.email,
+          user_id: String(result.session.userId),
+        })
+        return
+    }
+  }
+
+  const parsed = parsePastedToken(String(body["jwt"] ?? ""))
+  if (!parsed) {
+    sendPage(res, 400, renderConsentPage({ ...page, error: "Enter your email and password, or paste a token from the SendSquared CLI." }))
+    return
+  }
+  const profile = await lookupProfile(parsed.jwt)
   if (!profile.ok) {
     htmlError(res, 400, profile.error ?? "Token validation failed.")
     return
   }
-
-  const code = issueAuthorizationCode({
-    client_id,
-    redirect_uri,
-    code_challenge,
-    scope,
-    jwt,
-    refresh_token: refreshToken,
+  redirectWithCode(res, request, {
+    jwt: parsed.jwt,
+    refreshToken: parsed.refreshToken,
     user_email: profile.user_email!,
     user_id: profile.user_id!,
-    csrf_token,
   })
+})
 
-  const url = new URL(redirect_uri)
-  url.searchParams.set("code", code)
-  if (state) url.searchParams.set("state", state)
-
-  res.redirect(302, url.toString())
+oauthRouter.post("/authorize/otp", signInLimiter, async (req, res) => {
+  console.log(`[oauth] POST /authorize/otp body_keys=${Object.keys(req.body ?? {}).join(",")}`)
+  const body = (req.body ?? {}) as Record<string, unknown>
+  const request = authorizeRequestFrom(body)
+  const page = authorizeGate(request, res)
+  if (!page) {
+    return
+  }
+  const challenge_id = String(body["challenge_id"] ?? "")
+  const method = String(body["method"] ?? "")
+  const otp = String(body["otp"] ?? "").replace(/\s+/g, "")
+  if (challenge_id.length === 0 || otp.length === 0) {
+    sendPage(res, 400, renderOtpPage({ ...page, challenge_id, method, error: "Enter the verification code." }))
+    return
+  }
+  let session
+  try {
+    session = await loginOtp(SENDSQUARED_API_URL, challenge_id, otp)
+  } catch (err) {
+    const failure = signInFailure(err, "That code didn't work. Check it and try again.")
+    console.log(`[oauth] otp sign-in failed: ${failure.detail}`)
+    sendPage(res, failure.status, renderOtpPage({ ...page, challenge_id, method, error: failure.message }))
+    return
+  }
+  redirectWithCode(res, request, {
+    jwt: session.jwt,
+    refreshToken: session.refreshToken || null,
+    user_email: session.email,
+    user_id: String(session.userId),
+  })
 })
 
 oauthRouter.post("/token", async (req, res) => {

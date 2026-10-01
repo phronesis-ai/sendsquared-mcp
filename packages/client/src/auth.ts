@@ -18,6 +18,41 @@ export type LoginResult =
   | { kind: "ok"; session: LoginSession }
   | { kind: "mfa"; challenge: MfaChallenge }
 
+export class LoginError extends Error {
+  readonly status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = "LoginError"
+    this.status = status
+  }
+}
+
+/*
+  The login routes answer a failure with plain text ("Invalid username or
+  password") rather than JSON, so the body is read as text and parsed only if
+  it looks like JSON. The status rides along on the error so callers can tell
+  a rejected sign-in (4xx) from the API being down (5xx).
+*/
+async function readLoginBody(res: Response, fallback: string): Promise<Record<string, unknown>> {
+  const text = await res.text()
+  let body: unknown
+  if (/^\s*[{[]/.test(text)) {
+    try {
+      body = JSON.parse(text)
+    } catch {
+      body = undefined
+    }
+  }
+  if (!res.ok) {
+    const message = body && typeof body === "object" ? (body as Record<string, unknown>)["message"] : undefined
+    throw new LoginError(typeof message === "string" && message.length > 0 ? message : text.trim() || `${fallback}: ${res.status}`, res.status)
+  }
+  if (!body || typeof body !== "object") {
+    throw new LoginError(`${fallback}: unexpected response`, res.status)
+  }
+  return body as Record<string, unknown>
+}
+
 export async function loginPassword(
   baseUrl: string,
   username: string,
@@ -29,11 +64,7 @@ export async function loginPassword(
     body: JSON.stringify({ username, password, full_acls: true }),
   })
 
-  const body = (await res.json()) as Record<string, unknown>
-
-  if (!res.ok) {
-    throw new Error((body["message"] as string) ?? `Login failed: ${res.status}`)
-  }
+  const body = await readLoginBody(res, "Login failed")
 
   if (body["mfa_required"]) {
     return { kind: "mfa", challenge: body["mfa_required"] as MfaChallenge }
@@ -53,10 +84,7 @@ export async function loginOtp(
     body: JSON.stringify({ otp, id: challengeId, trust: true, full_acls: true }),
   })
 
-  const body = (await res.json()) as Record<string, unknown>
-  if (!res.ok) {
-    throw new Error((body["message"] as string) ?? `MFA failed: ${res.status}`)
-  }
+  const body = await readLoginBody(res, "MFA failed")
 
   return parseLoginResponse(body)
 }
