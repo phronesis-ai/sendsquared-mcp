@@ -1,0 +1,20 @@
+{
+  "name": "sendsquared-mcp-workspace",
+  "version": "0.0.0",
+  "private": true,
+  "description": "SendSquared MCP server \u2014 remote HTTP MCP endpoint and the shared API client it is built on",
+  "type": "module",
+  "workspaces": [
+    "packages/client",
+    "packages/mcp"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "dev": "npm run dev --workspace @sendsquared/mcp-server",
+    "start": "npm run start --workspace @sendsquared/mcp-server"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

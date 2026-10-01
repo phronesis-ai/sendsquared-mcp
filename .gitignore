@@ -1,0 +1,46 @@
+node_modules/
+dist/
+*.tgz
+
+# CLI bundle output
+packages/cli/dist/sendsquared-bundle.cjs
+
+# Credentials
+.config/sendsquared/
+credentials.json
+
+# Env files with secrets
+.env
+.env.*
+!.env.example
+sendsquared-mcp.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temp
+tmp/
+
+# Coverage
+coverage/
+
+# Deploy Scripts
+deploy-mcp.sh
+provision-mcp.sh
+packages/mcp/deploy
+
+# Internal notes and test harness stay in the private repo
+CLAUDE.md
+vitest.config.ts
+*.test.ts
+Dockerfile
