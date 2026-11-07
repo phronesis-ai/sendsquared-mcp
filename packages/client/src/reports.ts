@@ -46,6 +46,8 @@ export interface ReportRunOptions {
   afterContactId?: number
   pageSize?: number
   guidebookId?: number
+  triggerValue?: string
+  failureType?: string
 }
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
@@ -124,6 +126,8 @@ export function reportRunBody(opts: ReportRunOptions): Record<string, unknown> {
     ["afterContactId", "after_contact_id"],
     ["pageSize", "page_size"],
     ["guidebookId", "guidebook_id"],
+    ["triggerValue", "trigger_value"],
+    ["failureType", "failure_type"],
   ]
   for (const [key, apiKey] of scalars) {
     if (opts[key] !== undefined) {

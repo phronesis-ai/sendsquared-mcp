@@ -1,4 +1,5 @@
-import { apiForRequest, envelope, asString, asOptString, asOptNumber, asNumber } from "./shared.js"
+import { LeadEmailOutcome, resolveEmailSender, sendLeadEmail, type LeadEmailResult } from "@sendsquared/client"
+import { apiForRequest, envelope, asString, asOptString, asOptNumber, asNumber, asOptBoolean } from "./shared.js"
 import type { ToolDefinition } from "./types.js"
 
 export const leadsList: ToolDefinition = {
@@ -65,9 +66,11 @@ export const leadsCreate: ToolDefinition = {
   description: "Create a new SendSquared lead tied to an existing contact.",
   inputSchema: {
     type: "object",
-    required: ["contact_id"],
+    required: ["contact_id", "subject"],
     properties: {
       contact_id: { type: "number", description: "Contact id this lead is associated with" },
+      subject: { type: "string", description: "Lead subject / title — required by the API (e.g. 'Westlake Village Inn - 156 rooms - demo request')" },
+      followup_at: { type: "string", description: "Follow-up datetime, ISO 8601 (optional)" },
       lead_category_id: { type: "number", description: "Lead category id" },
       source_id: { type: "number", description: "Lead source id (valid values come from sendsquared_lead_sources_list)" },
       source_detail_id: {
@@ -81,8 +84,11 @@ export const leadsCreate: ToolDefinition = {
   },
   handler: async (args) => {
     const contactId = asNumber(args["contact_id"], "contact_id")
+    const subject = asString(args["subject"], "subject")
     const data = await apiForRequest().post("/leads", {
       contact_id: contactId,
+      subject,
+      followup_at: asOptString(args["followup_at"]),
       lead_category_id: asOptNumber(args["lead_category_id"]),
       source_id: asOptNumber(args["source_id"]),
       source_detail_id: asOptNumber(args["source_detail_id"]),
@@ -219,6 +225,53 @@ export const leadsGetOpen: ToolDefinition = {
   },
 }
 
+export const leadsSendEmail: ToolDefinition = {
+  name: "sendsquared_leads_send_email",
+  description:
+    "Send an email template to the contact on each lead, merged with that lead the same way the lead screen's " +
+    "Send Email does, so {{lead.*}} tokens and lead custom fields resolve. Contacts flagged don't-send-email or " +
+    "without a validated email are skipped, as is any lead whose merge leaves a token unfilled. With dryRun the " +
+    "merge and checks run but nothing is sent. Returns one result per lead: sent, preview, or skipped with a reason.",
+  inputSchema: {
+    type: "object",
+    required: ["leadIds", "templateId"],
+    properties: {
+      leadIds: { type: "array", items: { type: "number" }, description: "Lead ids" },
+      templateId: { type: "number", description: "Email template id" },
+      fromAddressId: { type: "number", description: "Verified email from-address id; the primary one when omitted" },
+      dryRun: { type: "boolean", default: false },
+    },
+  },
+  handler: async (args) => {
+    const rawIds = args["leadIds"]
+    if (!Array.isArray(rawIds) || rawIds.length === 0) {
+      throw new Error("leadIds must be a non-empty array of lead ids")
+    }
+    const leadIds = rawIds.map((v) => asNumber(v, "leadIds"))
+    const templateId = asNumber(args["templateId"], "templateId")
+    const dryRun = asOptBoolean(args["dryRun"]) ?? false
+    const api = apiForRequest()
+    const sender = await resolveEmailSender(api, asOptNumber(args["fromAddressId"]))
+
+    const results: LeadEmailResult[] = []
+    for (const leadId of leadIds) {
+      const result = await sendLeadEmail(api, leadId, templateId, sender, dryRun).catch(
+        (e: unknown): LeadEmailResult => ({
+          lead_id: leadId,
+          outcome: LeadEmailOutcome.Skipped,
+          reason: e instanceof Error ? e.message : String(e),
+        }),
+      )
+      results.push(result)
+    }
+    const count = (outcome: LeadEmailOutcome) => results.filter((r) => r.outcome === outcome).length
+    const summary = dryRun
+      ? `${count(LeadEmailOutcome.Preview)} of ${results.length} ready to send from ${sender.value}, ${count(LeadEmailOutcome.Skipped)} skipped (dry run)`
+      : `${count(LeadEmailOutcome.Sent)} of ${results.length} sent from ${sender.value}, ${count(LeadEmailOutcome.Skipped)} skipped`
+    return envelope(results, summary, ["sendsquared_leads_get", "sendsquared_email_templates_get"])
+  },
+}
+
 export const leadsTools: ToolDefinition[] = [
   leadsList,
   leadsGet,
@@ -228,4 +281,5 @@ export const leadsTools: ToolDefinition[] = [
   leadsArchive,
   leadsUnarchive,
   leadsDelete,
+  leadsSendEmail,
 ]

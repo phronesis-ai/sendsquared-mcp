@@ -51,6 +51,9 @@ export function campaignActionBody(input: CampaignActionInput): Record<string, u
   if (input.fromAddressId !== undefined && input.fromAddressId !== 0) {
     body["from_address_id"] = input.fromAddressId
   }
+  if (input.type === CampaignType.Postcard) {
+    body["from_address_id"] = 0
+  }
   if (input.type === CampaignType.Email) {
     if (input.replyToAddress !== undefined) {
       body["reply_to_address"] = input.replyToAddress
@@ -229,6 +232,68 @@ export function describeSchedule(fireAt: unknown): string {
     return `sends at ${at.toISOString()} (within 2 hours)`
   }
   return `send time ${at.toISOString()} is in the past`
+}
+
+export enum CampaignBuildState {
+  NotStarted = "not_started",
+  Building = "building",
+  Released = "released",
+  Failed = "failed",
+  Stopped = "stopped",
+}
+
+export interface CampaignBuildProgress {
+  state: CampaignBuildState
+  chunks_total: number
+  chunks_queued: number
+  chunks_building: number
+  chunks_retrying: number
+  chunks_built: number
+  chunks_released: number
+  chunks_failed: number
+  chunks_abandoned: number
+  chunks_stopped: number
+  contacts_total: number
+  contacts_built: number
+  contacts_released: number
+  contacts_skipped: number
+  started_at?: string
+  finished_at?: string
+  failure_reason?: string
+  skipped: { reason: string; contacts: number }[]
+  errors: { chunk_no: number; attempts: number; error: string }[]
+}
+
+export interface CampaignBuild {
+  campaign_id: number
+  send: CampaignBuildProgress
+  resend: CampaignBuildProgress
+}
+
+/*
+  An email campaign's audience is built in chunks of 1,000 contacts across the
+  email service's pods. Built emails are held and nothing sends until every
+  chunk is built, then the campaign is released whole; a build that fails or
+  is stopped sends nothing. This is the one-line reading of where a build
+  stands. Skipped contacts are ones the build could not email (no address,
+  opted out, merge error).
+*/
+export function describeCampaignBuild(progress: CampaignBuildProgress): string {
+  const built = `${progress.contacts_built} of ${progress.contacts_total} contacts built`
+  switch (progress.state) {
+    case CampaignBuildState.NotStarted:
+      return "not started"
+    case CampaignBuildState.Building: {
+      const retrying = progress.chunks_retrying > 0 ? `, ${progress.chunks_retrying} chunk(s) retrying after an error` : ""
+      return `building, ${progress.chunks_built} of ${progress.chunks_total} chunks done, ${built}, nothing sent yet${retrying}`
+    }
+    case CampaignBuildState.Released:
+      return `released to send, ${progress.contacts_released} built and ${progress.contacts_skipped} skipped`
+    case CampaignBuildState.Failed:
+      return `failed, nothing was sent: ${progress.failure_reason ?? "no reason recorded"}`
+    case CampaignBuildState.Stopped:
+      return `stopped, ${progress.chunks_stopped} chunk(s) stopped, nothing from this build was sent`
+  }
 }
 
 export enum EmailAttachMode {

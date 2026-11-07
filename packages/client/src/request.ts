@@ -1,4 +1,4 @@
-import { refreshAuthToken } from "./auth.js"
+import { refreshAuthToken, SessionExpiredError } from "./auth.js"
 
 const DEFAULT_BASE_URL = "https://api.sendsquared.com"
 
@@ -77,6 +77,11 @@ export async function request<T = unknown>(
     const newJwt = await refreshAuthToken(baseUrl, ctx.refreshToken)
     if (ctx.onTokenRefresh) await ctx.onTokenRefresh(newJwt)
     res = await fetch(urlString, requestInit(method, newJwt, body))
+  }
+
+  if (res.status === 401) {
+    const errBody = await res.text().catch(() => "")
+    throw new SessionExpiredError(errBody.trim().slice(0, 200) || "HTTP 401", 401)
   }
 
   if (res.status === 429) {

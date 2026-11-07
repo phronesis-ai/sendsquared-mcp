@@ -71,7 +71,10 @@ export type WorkflowActionInput = {
   reply_to_address?: string | null
   reply_to_display_name?: string | null
   send_to?: string[]
-  entity_attribute?: null
+  entity_attribute?: string | null
+  type_attribute_1?: string | null
+  other_emails?: string | null
+  smart_send?: boolean
   condition_type?: string | null
   operator?: string | null
   operand?: string | null
@@ -109,6 +112,41 @@ export interface WorkflowStepDef {
   fromDisplayName?: string
   replyToAddress?: string
   replyToDisplayName?: string
+  fromAddress?: number
+  waitUntil?: string
+  followers?: number[]
+  dueIn?: string
+  remindIn?: string
+  priority?: number
+  smartSend?: boolean
+}
+
+/*
+  Step fields the engine reads from repurposed action columns. A Wait with
+  waitUntil ("HH:MM,IANA/Zone[,dow|dom,N]") fires at the next such clock time
+  after its duration. A Task stores its label in from_display_name, followers
+  in other_emails, and due / remind offsets (seconds from creation) in the
+  reply_to columns. The API refuses an assignee on a task step, so followers
+  are how a task reaches a person.
+*/
+function applyStepExtras(node: WorkflowActionInput, step: WorkflowStepDef): void {
+  switch (node.action_type) {
+    case WorkflowActionType.Wait:
+      if (step.waitUntil !== undefined) {
+        node.entity_attribute = "wait_until"
+        node.type_attribute_1 = step.waitUntil
+      }
+      break
+    case WorkflowActionType.Task:
+      if (step.label !== undefined) node.from_display_name = step.label
+      if (step.followers !== undefined) node.other_emails = step.followers.join(",")
+      if (step.dueIn !== undefined) node.reply_to_address = String(parseWorkflowDuration(step.dueIn))
+      if (step.remindIn !== undefined) node.reply_to_display_name = String(parseWorkflowDuration(step.remindIn))
+      if (step.priority !== undefined) node.type_attribute_1 = String(step.priority)
+      break
+    default:
+      break
+  }
 }
 
 export function buildWorkflowActionNode(
@@ -134,6 +172,8 @@ export function buildWorkflowActionNode(
   }
   if (needsFrom) {
     node.from_address_id = fromAddressId ?? null
+  }
+  if (type === WorkflowActionType.Email) {
     node.send_to = ["contact"]
   }
   if (isWait) {
@@ -169,11 +209,13 @@ export function stepsToNestedTree(
     const normalizedType = step.type.toLowerCase() as WorkflowActionType
     const isWait = normalizedType === WorkflowActionType.Wait
     const typeValue = isWait ? parseWorkflowDuration(String(step.value)) : Number(step.value)
-    const node = buildWorkflowActionNode(normalizedType, typeValue, step.label, step.condition, fromAddressId, {
+    const node = buildWorkflowActionNode(normalizedType, typeValue, step.label, step.condition, step.fromAddress ?? fromAddressId, {
       fromDisplayName: step.fromDisplayName,
       replyToAddress: step.replyToAddress,
       replyToDisplayName: step.replyToDisplayName,
     })
+    applyStepExtras(node, step)
+    if (step.smartSend !== undefined) node.smart_send = step.smartSend
     if (step.children && step.children.length > 0) {
       node.children = step.children.map(convertStep)
     }

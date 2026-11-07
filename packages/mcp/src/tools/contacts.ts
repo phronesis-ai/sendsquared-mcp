@@ -415,6 +415,16 @@ export const contactsMerge: ToolDefinition = {
         mergedContact[f] = firstNonEmpty(primary[f], secondary[f])
       }
     }
+    /*
+      Empty fields are left out so the server leaves them alone: mobile_phone
+      "" collides with the company-wide unique mobile index (500). email must
+      stay, even empty, because the server binds it straight into raw SQL.
+    */
+    for (const f of Object.keys(mergedContact)) {
+      if (f !== "email" && mergedContact[f] === "") {
+        delete mergedContact[f]
+      }
+    }
     const data = await client.post("/contacts/merge/", {
       contact_id1: Number(primaryId),
       contact_id2: Number(secondaryId),

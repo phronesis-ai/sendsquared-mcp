@@ -59,6 +59,8 @@ const READ_ONLY_PATTERNS: RegExp[] = [
   /_detail$/,
   /_columns$/,
   /_audit$/,
+  /_effective$/,
+  /_by_unit$/,
   /_check$/,
   /_from_numbers$/,
 ]
@@ -87,6 +89,7 @@ const DESTRUCTIVE_EXACT = new Set([
   "sendsquared_guidebook_blocks_conditions_set",
   "sendsquared_guidebook_blocks_guidebooks_set",
   "sendsquared_guidebook_blocks_set_assets",
+  "sendsquared_scoring_templates_criteria_set",
   "sendsquared_contacts_legal_acceptance_party_members_set",
   "sendsquared_contacts_vehicles_set",
   /*
