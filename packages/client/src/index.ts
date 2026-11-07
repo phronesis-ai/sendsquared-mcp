@@ -1,6 +1,6 @@
 export { request, createClient } from "./request.js"
 export type { Client, ClientContext, PageResult, QueryParams, QueryValue } from "./request.js"
-export { loginPassword, loginOtp, refreshAuthToken, LoginError } from "./auth.js"
+export { loginPassword, loginOtp, refreshAuthToken, LoginError, SessionExpiredError } from "./auth.js"
 export type { LoginResult, LoginSession, MfaChallenge } from "./auth.js"
 export {
   parseConditions,
@@ -97,9 +97,85 @@ export {
   resendWindowError,
   campaignPreflight,
   describeSchedule,
+  CampaignBuildState,
+  describeCampaignBuild,
   EmailAttachMode,
   attachEmailTemplate,
   attachCampaignTemplate,
   assertCampaignSender,
 } from "./campaigns.js"
-export type { CampaignActionInput, CampaignPreflightInput } from "./campaigns.js"
+export type { CampaignActionInput, CampaignPreflightInput, CampaignBuild, CampaignBuildProgress } from "./campaigns.js"
+export {
+  ValidDomainType,
+  LeadEmailOutcome,
+  resolveEmailSender,
+  findUnmergedToken,
+  sendLeadEmail,
+} from "./leadEmail.js"
+export type { ValidDomain, LeadEmailResult } from "./leadEmail.js"
+export {
+  KnowledgeLevel,
+  KNOWLEDGE_LEVELS,
+  KNOWLEDGE_CATEGORY_DEFAULT_COLOR,
+  knowledgeScopeFields,
+  knowledgeLevelOf,
+  knowledgeScopeLabel,
+  knowledgeListFilters,
+  effectiveKnowledgeQuery,
+  effectiveContextForUnit,
+  knowledgeEntryBody,
+  resolveKnowledgeTypeId,
+  resolveKnowledgeCategoryIds,
+} from "./knowledge.js"
+export type { KnowledgeScope, KnowledgeListOptions, EffectiveContext, KnowledgeEntryInput } from "./knowledge.js"
+export { knowledgeStacksForUnit } from "./knowledge.js"
+export type { KnowledgeLayer, KnowledgeStack } from "./knowledge.js"
+export { AiConstraint, AI_CONSTRAINTS, AI_AGENT_DEFAULTS, aiAgentBody, assertContextTypes, aiContextBody, aiSessionFilters, aiSessionStats } from "./ai.js"
+export type { AiAgentInput, AiContextInput, AiSessionFilters, AiSessionStats } from "./ai.js"
+export {
+  SCORING_CHANNELS,
+  SCORED_FILTERS,
+  CRITERIA_SCORE_TYPES,
+  CHANNEL_WEIGHTS,
+  asScoringChannel,
+  asScoredFilter,
+  zonedDate,
+  zonedDayBounds,
+  monthRange,
+  companyTimezone,
+  conversationScoreQuery,
+  scoringCriteriaPath,
+  criterionValue,
+  messageScore,
+  overallScore,
+  scoreMessage,
+  conversationScorePayload,
+  scoreConversation,
+  KPI_GOAL_METRICS,
+  KPI_GOAL_OPTIONAL_METRICS,
+  KPI_AGENT_METRICS,
+  kpiMetricValues,
+  kpiGoalBody,
+  kpiGoalScopeOf,
+  agentKpiGoalBodies,
+  findKpiGoal,
+  runKpiReport,
+  scoringTemplateBody,
+  scoringCriterionBody,
+  displayOrders,
+} from "./scoring.js"
+export type {
+  ScoringChannel,
+  ScoredFilter,
+  ConversationScoreFilters,
+  ScoringCriterion,
+  MessageScoreInput,
+  ScoredMessage,
+  ScoreConversationInput,
+  ScoreConversationResult,
+  KpiMetricValues,
+  KpiGoalScope,
+  KpiReportInput,
+  ScoringTemplateInput,
+  ScoringCriterionInput,
+} from "./scoring.js"

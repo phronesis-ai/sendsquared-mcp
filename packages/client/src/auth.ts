@@ -27,25 +27,43 @@ export class LoginError extends Error {
   }
 }
 
+export class SessionExpiredError extends Error {
+  readonly status: number
+  readonly detail: string
+  constructor(detail: string, status: number) {
+    super(`SendSquared session expired or invalid (${detail})`)
+    this.name = "SessionExpiredError"
+    this.status = status
+    this.detail = detail
+  }
+}
+
 /*
   The login routes answer a failure with plain text ("Invalid username or
   password") rather than JSON, so the body is read as text and parsed only if
   it looks like JSON. The status rides along on the error so callers can tell
   a rejected sign-in (4xx) from the API being down (5xx).
 */
+function parseJsonText(text: string): unknown {
+  if (!/^\s*[{["]/.test(text)) return undefined
+  try {
+    return JSON.parse(text)
+  } catch {
+    return undefined
+  }
+}
+
+function errorMessage(body: unknown, text: string): string | undefined {
+  const message = body && typeof body === "object" ? (body as Record<string, unknown>)["message"] : undefined
+  if (typeof message === "string" && message.length > 0) return message
+  return text.trim() || undefined
+}
+
 async function readLoginBody(res: Response, fallback: string): Promise<Record<string, unknown>> {
   const text = await res.text()
-  let body: unknown
-  if (/^\s*[{[]/.test(text)) {
-    try {
-      body = JSON.parse(text)
-    } catch {
-      body = undefined
-    }
-  }
+  const body = parseJsonText(text)
   if (!res.ok) {
-    const message = body && typeof body === "object" ? (body as Record<string, unknown>)["message"] : undefined
-    throw new LoginError(typeof message === "string" && message.length > 0 ? message : text.trim() || `${fallback}: ${res.status}`, res.status)
+    throw new LoginError(errorMessage(body, text) ?? `${fallback}: ${res.status}`, res.status)
   }
   if (!body || typeof body !== "object") {
     throw new LoginError(`${fallback}: unexpected response`, res.status)
@@ -95,6 +113,12 @@ export async function loginOtp(
   persisted over the stored credentials and logs the user out on the first
   token expiry. The object form is still accepted in case the endpoint grows
   an envelope, and an unusable response throws rather than being written back.
+
+  A rejected refresh comes back as plain text ("Invalid refresh token"), so
+  the body is read as text. Calling res.json() on it used to throw a JSON
+  parse error that hid the real cause. A 4xx means the refresh token itself
+  is dead, so it is raised as SessionExpiredError and callers can point the
+  user at a fresh login. A 5xx is the API failing and stays a plain Error.
 */
 export async function refreshAuthToken(baseUrl: string, token: string): Promise<string> {
   const res = await fetch(`${baseUrl}/v1/login/refresh-token`, {
@@ -103,12 +127,14 @@ export async function refreshAuthToken(baseUrl: string, token: string): Promise<
     body: JSON.stringify({ refreshToken: token }),
   })
 
-  const body = (await res.json()) as unknown
+  const text = await res.text()
+  const body = parseJsonText(text)
 
   if (!res.ok) {
-    const message =
-      body && typeof body === "object" ? (body as Record<string, unknown>)["message"] : undefined
-    throw new Error(typeof message === "string" ? message : `Token refresh failed: ${res.status}`)
+    if (res.status >= 400 && res.status < 500) {
+      throw new SessionExpiredError(errorMessage(body, text) ?? `HTTP ${res.status}`, res.status)
+    }
+    throw new Error(`Token refresh failed: ${res.status}`)
   }
 
   if (typeof body === "string" && body.length > 0) return body

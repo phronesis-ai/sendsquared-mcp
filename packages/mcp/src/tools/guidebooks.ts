@@ -1395,6 +1395,23 @@ export const guidebooksUnitAssignments: ToolDefinition = {
   },
 }
 
+/*
+  The guidebook GET reports the section order as {type, order}, but the write
+  endpoint validates {blockType, order} and 422s on the read spelling. Accept
+  either from the agent and always send what the API wants.
+*/
+export function blockTypeOrderPayload(entries: unknown[]): Array<{ blockType: string; order: number }> {
+  return entries.map((entry, index) => {
+    const e = (entry ?? {}) as Record<string, unknown>
+    const blockType = typeof e["blockType"] === "string" ? e["blockType"] : e["type"]
+    if (typeof blockType !== "string" || blockType.length === 0) {
+      throw new Error(`order[${index}] needs a type`)
+    }
+    const order = typeof e["order"] === "number" ? e["order"] : index
+    return { blockType, order }
+  })
+}
+
 export const guidebooksSetBlockTypeOrder: ToolDefinition = {
   name: "sendsquared_guidebooks_set_block_type_order",
   description:
@@ -1411,13 +1428,13 @@ export const guidebooksSetBlockTypeOrder: ToolDefinition = {
         description: "Block types in the order they should render",
         items: {
           type: "object",
-          required: ["type", "order"],
+          required: ["type"],
           properties: {
             type: {
               type: "string",
               enum: ["identity", "houseGuides", "houseAccess", "areaGuides", "localGuides", "restaurantGuides", "activityGuides", "otherGuides", "legalTerms", "vehicleInfo"],
             },
-            order: { type: "number", description: "Zero-based position" },
+            order: { type: "number", description: "Zero-based position; defaults to the array index" },
           },
         },
       },
@@ -1425,10 +1442,11 @@ export const guidebooksSetBlockTypeOrder: ToolDefinition = {
   },
   handler: async (args) => {
     const guidebookId = asString(args["guidebookId"], "guidebookId")
-    const order = args["order"]
-    if (!Array.isArray(order) || order.length === 0) {
+    const requested = args["order"]
+    if (!Array.isArray(requested) || requested.length === 0) {
       throw new Error("order must be a non-empty array")
     }
+    const order = blockTypeOrderPayload(requested)
     const client = apiForRequest()
     await liveGuidebook(client, guidebookId)
     const data = await client.post(`/guidebooks/block-type-order/${encodeURIComponent(guidebookId)}`, { order })

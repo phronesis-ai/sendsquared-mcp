@@ -22,6 +22,9 @@ import { notesTools } from "./tools/notes.js"
 import { staffingTools } from "./tools/staffing.js"
 import { surveysTools } from "./tools/surveys.js"
 import { importsTools } from "./tools/imports.js"
+import { knowledgeTools } from "./tools/knowledge.js"
+import { scoringTools, kpiTools } from "./tools/scoring.js"
+import { aiTools } from "./tools/ai.js"
 import { metaTools } from "./tools/meta.js"
 import { registerSkills } from "./skills/register.js"
 import { deriveAnnotations } from "./tools/annotations.js"
@@ -50,6 +53,10 @@ const ALL_TOOLS: ToolDefinition[] = [
   ...staffingTools,
   ...surveysTools,
   ...importsTools,
+  ...knowledgeTools,
+  ...aiTools,
+  ...scoringTools,
+  ...kpiTools,
   ...metaTools,
 ]
 
@@ -57,7 +64,7 @@ const TOOL_BY_NAME = new Map(ALL_TOOLS.map((t) => [t.name, t]))
 
 export function buildMcpServer(): Server {
   const server = new Server(
-    { name: "sendsquared", version: "0.2.20" },
+    { name: "sendsquared", version: "0.2.23" },
     { capabilities: { tools: {}, resources: {}, prompts: {} } },
   )
 

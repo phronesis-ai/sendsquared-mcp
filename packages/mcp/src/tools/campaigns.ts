@@ -49,7 +49,7 @@ const CONFIGURE_PROPS = {
   from_display_name: { type: "string", description: "Email from display name (default: the from-address's name)" },
   reply_to_address: { type: "string" },
   reply_to_display_name: { type: "string" },
-  smart_send: { type: "boolean", description: "true: send at each contact's preferred time; false: all at the send time" },
+  smart_send: { type: "boolean", description: "true: send at each contact's preferred time; false: start sending at the send time (email goes out at up to 100,000 per hour)" },
   group_ids: { type: "array", items: { type: "number" }, description: "Group/segment ids to send to (replaces the current list)" },
   exclude_group_ids: { type: "array", items: { type: "number" }, description: "Group/segment ids to exclude" },
   brand_id: { type: "number", description: "Brand id; the from-address must belong to the same brand" },
