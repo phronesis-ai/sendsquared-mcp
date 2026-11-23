@@ -222,18 +222,7 @@ export const emailTemplatesReadContent: ToolDefinition = {
   },
   handler: async (args) => {
     const id = asString(args["id"], "id")
-    const api = apiForRequest()
-    const signed = await api.get<{ url: string; template_id: number }>(
-      `/email-templates/signed-url/${encodeURIComponent(id)}`,
-    )
-    if (!signed.url) {
-      throw new Error("SendSquared API did not return a signed download URL for the template")
-    }
-    const res = await fetch(signed.url)
-    if (!res.ok) {
-      throw new Error(`S3 download failed: ${res.status}`)
-    }
-    const content = (await res.json()) as StripoContent
+    const { signed, content } = await downloadStripoContent(id)
     return envelope(
       { template_id: signed.template_id, ...content },
       `Email template ${id} HTML (${(content.html ?? "").length} chars)`,
@@ -331,9 +320,29 @@ export const emailTemplatesDuplicate: ToolDefinition = {
   },
 }
 
+async function downloadStripoContent(id: string): Promise<{ signed: { url: string; template_id: number }; content: StripoContent }> {
+  const signed = await apiForRequest().get<{ url: string; template_id: number }>(`/email-templates/signed-url/${encodeURIComponent(id)}`)
+  if (!signed.url) {
+    throw new Error("SendSquared API did not return a signed download URL for the template")
+  }
+  const res = await fetch(signed.url)
+  if (!res.ok) {
+    throw new Error(`S3 download failed: ${res.status}`)
+  }
+  const content = (await res.json()) as StripoContent
+  return { signed, content }
+}
+
+async function downloadTemplateContent(id: string): Promise<string> {
+  const { content } = await downloadStripoContent(id)
+  return content.html ?? ""
+}
+
 export const emailTemplatesPreview: ToolDefinition = {
   name: "sendsquared_email_templates_preview",
-  description: "Render a preview of a SendSquared email template. Returns the compiled HTML with merge tokens filled in from sample data.",
+  description:
+    "Return the stored HTML of a SendSquared email template with merge tokens left in place, for a quick look at the layout. " +
+    "Use sendsquared_email_templates_merge_preview to render it for a real contact or reservation.",
   inputSchema: {
     type: "object",
     required: ["id"],
@@ -341,8 +350,8 @@ export const emailTemplatesPreview: ToolDefinition = {
   },
   handler: async (args) => {
     const id = asString(args["id"], "id")
-    const data = await apiForRequest().get(`/email-templates/${encodeURIComponent(id)}/preview`)
-    return envelope(data, `Preview of email template ${id}`, ["sendsquared_email_templates_get"])
+    const html = await downloadTemplateContent(id)
+    return envelope({ id, html }, `Stored HTML of email template ${id}`, ["sendsquared_email_templates_merge_preview", "sendsquared_email_templates_get"])
   },
 }
 

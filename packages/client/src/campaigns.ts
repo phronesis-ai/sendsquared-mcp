@@ -358,8 +358,10 @@ export async function attachCampaignTemplate(api: TemplateApi, type: CampaignTyp
     case CampaignType.Email:
       return attachEmailTemplate(api, templateId, emailMode)
     case CampaignType.Sms: {
-      const source = (await api.get(`/templates/${templateId}`)) as Record<string, unknown>
-      const created = (await api.post(`/templates/system-sms/${templateId}`, { text: source["plain_content"] ?? "", image: source["image"] ?? null })) as { id: number }
+      const source = (await api.get(`/templates/${templateId}`)) as { plain_content?: string; json_content?: { media?: { media?: string[] } } }
+      const image = source.json_content?.media?.media?.[0]
+      const body = image ? { text: source.plain_content ?? "", image } : { text: source.plain_content ?? "" }
+      const created = (await api.post(`/templates/system-sms/${templateId}`, body)) as { id: number }
       return created.id
     }
     case CampaignType.Postcard: {

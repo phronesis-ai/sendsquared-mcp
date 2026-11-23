@@ -9,6 +9,7 @@ import { extractBearer, validateToken, invalidateJwt } from "./auth.js"
 import { perTokenRateLimit } from "./rateLimit.js"
 import { oauthRouter } from "./oauth/routes.js"
 import { buildAuthServerMetadata, buildProtectedResourceMetadata } from "./oauth/metadata.js"
+import { asyncRoute } from "./asyncRoute.js"
 
 const PORT = Number(process.env["PORT"] ?? 8080)
 const SENDSQUARED_API_URL = process.env["SENDSQUARED_API_URL"] ?? "https://api.sendsquared.com"
@@ -153,7 +154,7 @@ app.post(
   "/mcp",
   globalLimiter,
   perTokenRateLimit,
-  async (req: Request, res: Response, next: NextFunction) => {
+  asyncRoute(async (req: Request, res: Response, next: NextFunction) => {
     const auth = await authenticate(req)
     if (!auth.ok) {
       console.log(`[auth] REJECTED status=${auth.status} message="${auth.message.slice(0, 100)}"`)
@@ -196,7 +197,7 @@ app.post(
         next(err)
       })
     })
-  },
+  }),
 )
 
 async function handleSessionRequest(req: Request, res: Response): Promise<void> {
@@ -219,14 +220,28 @@ async function handleSessionRequest(req: Request, res: Response): Promise<void> 
   })
 }
 
-app.get("/mcp", globalLimiter, perTokenRateLimit, handleSessionRequest)
-app.delete("/mcp", globalLimiter, perTokenRateLimit, handleSessionRequest)
+app.get("/mcp", globalLimiter, perTokenRateLimit, asyncRoute(handleSessionRequest))
+app.delete("/mcp", globalLimiter, perTokenRateLimit, asyncRoute(handleSessionRequest))
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error("[sendsquared-mcp] unhandled error:", err.message)
   if (!res.headersSent) {
     res.status(500).json({ error: "Internal server error" })
   }
+})
+
+/*
+  Last line of defence. A rejection that escapes every handler used to exit
+  the process, which the load balancer reported as a 502 to every connected
+  user while systemd restarted the service. Logging and carrying on is the
+  better failure here: the one request that broke has already been lost.
+*/
+process.on("unhandledRejection", (reason) => {
+  const detail = reason instanceof Error ? reason.stack ?? reason.message : String(reason)
+  console.error(`[sendsquared-mcp] unhandled rejection: ${detail}`)
+})
+process.on("uncaughtException", (err) => {
+  console.error(`[sendsquared-mcp] uncaught exception: ${err.stack ?? err.message}`)
 })
 
 app.listen(PORT, () => {

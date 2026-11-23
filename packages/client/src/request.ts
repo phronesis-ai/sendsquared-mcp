@@ -23,7 +23,7 @@ export interface Client {
   post: <T = unknown>(path: string, body?: unknown) => Promise<T>
   put: <T = unknown>(path: string, body?: unknown) => Promise<T>
   patch: <T = unknown>(path: string, body?: unknown) => Promise<T>
-  delete: <T = unknown>(path: string) => Promise<T>
+  delete: <T = unknown>(path: string, body?: unknown) => Promise<T>
   postForm: <T = unknown>(path: string, form: FormData) => Promise<T>
 }
 
@@ -151,8 +151,8 @@ export function createClient(ctx: ClientContext): Client {
     patch: <T = unknown>(path: string, body?: unknown) =>
       request<T>(ctx, "PATCH", path, body),
 
-    delete: <T = unknown>(path: string) =>
-      request<T>(ctx, "DELETE", path),
+    delete: <T = unknown>(path: string, body?: unknown) =>
+      request<T>(ctx, "DELETE", path, body),
 
     postForm: <T = unknown>(path: string, form: FormData) =>
       request<T>(ctx, "POST", path, form),

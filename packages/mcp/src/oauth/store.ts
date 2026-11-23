@@ -9,6 +9,13 @@ export interface RegisteredClient {
   registered_at: number
 }
 
+export class RegistryFullError extends Error {
+  constructor() {
+    super("Every registered client is in active use; no room for another")
+    this.name = "RegistryFullError"
+  }
+}
+
 export interface AuthorizationCode {
   code: string
   client_id: string
@@ -162,7 +169,39 @@ function newToken(prefix: string): string {
   return `${prefix}_${randomBytes(32).toString("base64url")}`
 }
 
+export const MAX_REGISTERED_CLIENTS = 2000
+
+/*
+  claude.ai registers a brand new client every time someone adds the
+  connector, including every failed attempt, and nothing ever removed them.
+  The registry filled up (500 clients, 86 of them with a live token) and every
+  new user was turned away with a 503. A client whose tokens have all expired,
+  or that never finished signing in, is dead weight: evicting it only means
+  that stale connector re-registers, which claude.ai does on its own.
+*/
+export function pruneStaleClients(keep = MAX_REGISTERED_CLIENTS): number {
+  const now = Date.now()
+  const inUse = new Set<string>()
+  for (const token of accessTokens.values()) if (now <= token.expires_at) inUse.add(token.client_id)
+  for (const token of refreshTokens.values()) if (now <= token.expires_at) inUse.add(token.client_id)
+  for (const code of codes.values()) if (now <= code.expires_at) inUse.add(code.client_id)
+
+  const stale = [...clients.values()].filter((c) => !inUse.has(c.client_id)).sort((a, b) => a.registered_at - b.registered_at)
+  const excess = clients.size - keep
+  if (excess <= 0) return 0
+  const victims = stale.slice(0, excess)
+  for (const victim of victims) clients.delete(victim.client_id)
+  if (victims.length > 0) saveState()
+  return victims.length
+}
+
 export function registerClient(input: { redirect_uris: string[]; client_name?: string }): RegisteredClient {
+  if (clients.size >= MAX_REGISTERED_CLIENTS) {
+    pruneStaleClients(MAX_REGISTERED_CLIENTS - 1)
+  }
+  if (clients.size >= MAX_REGISTERED_CLIENTS) {
+    throw new RegistryFullError()
+  }
   const record: RegisteredClient = {
     client_id: newToken("ss_client"),
     redirect_uris: input.redirect_uris,
@@ -399,5 +438,6 @@ const sweepHandle = setInterval(() => {
   for (const [k, v] of accessTokens) if (now > v.expires_at) { accessTokens.delete(k); mutated = true }
   for (const [k, v] of refreshTokens) if (now > v.expires_at) { refreshTokens.delete(k); mutated = true }
   if (mutated) saveState()
+  pruneStaleClients(Math.floor(MAX_REGISTERED_CLIENTS / 2))
 }, 5 * 60 * 1000)
 sweepHandle.unref()
