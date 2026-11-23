@@ -21,6 +21,9 @@ export type ValidationResult =
 
 const CACHE_TTL_MS = 5 * 60 * 1000
 
+export const SESSION_EXPIRED_MESSAGE = "Your SendSquared session has expired. Reconnect the SendSquared connector to sign in again."
+export const API_UNREACHABLE_MESSAGE = "SendSquared is not reachable right now. Try again in a few minutes."
+
 /*
   Cache is keyed by SHA-256(JWT), not the raw bearer the request arrived with.
   This means a JWT validated through the Claude Code path (raw JWT in the
@@ -61,6 +64,17 @@ export function jwtExpiredLocally(jwt: string): boolean {
   } catch {
     return false
   }
+}
+
+/*
+  A connect timeout to the API rejects the fetch promise; without this it
+  escaped the request handler and took the process down.
+*/
+function fetchUser(baseUrl: string, jwt: string): Promise<Response | undefined> {
+  return fetch(`${baseUrl}/v1/user/`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${jwt}`, "Content-Type": "application/json" },
+  }).catch(() => undefined)
 }
 
 export async function validateToken(
@@ -112,7 +126,7 @@ export async function validateToken(
         ok: false,
         error: {
           status: 401,
-          message: "SendSquared token has expired. Run `sendsquared auth login && sendsquared auth token` and re-paste, or reconnect the connector in claude.ai.",
+          message: SESSION_EXPIRED_MESSAGE,
         },
       }
     }
@@ -124,13 +138,10 @@ export async function validateToken(
     return { ok: true, profile: cached, effectiveJwt: jwt }
   }
 
-  let res = await fetch(`${baseUrl}/v1/user/`, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${jwt}`,
-      "Content-Type": "application/json",
-    },
-  })
+  let res = await fetchUser(baseUrl, jwt)
+  if (!res) {
+    return { ok: false, error: { status: 502, message: API_UNREACHABLE_MESSAGE } }
+  }
 
   /*
     If the API rejects a JWT that looked good locally (clock skew, server-side
@@ -142,13 +153,11 @@ export async function validateToken(
     const refreshed = await refreshSendsquaredJwt(opaqueToken, baseUrl)
     if (refreshed && refreshed !== jwt) {
       jwt = refreshed
-      res = await fetch(`${baseUrl}/v1/user/`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${jwt}`,
-          "Content-Type": "application/json",
-        },
-      })
+      const retried = await fetchUser(baseUrl, jwt)
+      if (!retried) {
+        return { ok: false, error: { status: 502, message: API_UNREACHABLE_MESSAGE } }
+      }
+      res = retried
     }
   }
 
@@ -158,7 +167,7 @@ export async function validateToken(
       ok: false,
       error: {
         status: 401,
-        message: "SendSquared token is invalid or expired. Run `sendsquared auth login && sendsquared auth token` and re-paste, or reconnect the connector in claude.ai.",
+        message: SESSION_EXPIRED_MESSAGE,
       },
     }
   }

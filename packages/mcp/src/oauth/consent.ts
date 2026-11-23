@@ -1,4 +1,5 @@
 import type { RegisteredClient } from "./store.js"
+import type { MfaOption } from "@sendsquared/client"
 import { SENDSQUARED_LOGO_SVG } from "./logo.js"
 
 export interface ConsentParams {
@@ -15,6 +16,11 @@ export interface ConsentParams {
 export interface OtpParams extends ConsentParams {
   challenge_id: string
   method: string
+}
+
+export interface MfaChoiceParams extends ConsentParams {
+  session_id: string
+  options: MfaOption[]
 }
 
 function escapeHtml(s: string): string {
@@ -131,6 +137,50 @@ export function renderOtpPage(params: OtpParams): string {
     <label for="otp">Verification code</label>
     <input id="otp" name="otp" type="text" inputmode="numeric" autocomplete="one-time-code" required autofocus>
     <button type="submit">Verify and connect</button>
+  </form>
+</body>
+</html>`
+}
+
+function describeOption(option: MfaOption): string {
+  switch (option.method) {
+    case "sms":
+      return `Text a code to the phone ending in ${escapeHtml(option.context)}`
+    case "email":
+      return `Email a code to ${escapeHtml(option.context)}`
+    case "totp":
+      return option.context ? `Use your authenticator app (${escapeHtml(option.context)})` : "Use your authenticator app"
+    default:
+      return escapeHtml(option.method)
+  }
+}
+
+export function renderMfaChoicePage(params: MfaChoiceParams): string {
+  const clientName = escapeHtml(params.client.client_name ?? "An application")
+  const choices = params.options
+    .map((option, index) => `
+    <label class="choice"><input type="radio" name="method" value="${escapeHtml(option.method)}"${index === 0 ? " checked" : ""} required> ${describeOption(option)}</label>`)
+    .join("")
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connect SendSquared</title>
+<style>${PAGE_STYLE}
+  .choice { display: block; font-weight: normal; margin: 10px 0; }
+  .choice input { width: auto; margin: 0 8px 0 0; }</style>
+</head>
+<body>
+  ${SENDSQUARED_LOGO_SVG}
+  <h1>Choose how to get your code</h1>
+  <p>Your account uses two-step sign-in. Pick where to send the verification code to finish connecting ${clientName}.</p>
+  ${errorBlock(params.error)}
+  <form method="POST" action="/oauth/authorize/mfa-method" autocomplete="off">
+    ${hiddenFields(params)}
+    <input type="hidden" name="session_id" value="${escapeHtml(params.session_id)}">
+    ${choices}
+    <button type="submit">Send code</button>
   </form>
 </body>
 </html>`

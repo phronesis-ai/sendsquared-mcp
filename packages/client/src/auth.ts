@@ -14,9 +14,20 @@ export interface MfaChallenge {
   method: string
 }
 
+export interface MfaOption {
+  method: string
+  context: string
+}
+
+export interface MfaChoice {
+  id: string
+  options: MfaOption[]
+}
+
 export type LoginResult =
   | { kind: "ok"; session: LoginSession }
   | { kind: "mfa"; challenge: MfaChallenge }
+  | { kind: "mfa_choice"; choice: MfaChoice }
 
 export class LoginError extends Error {
   readonly status: number
@@ -88,7 +99,42 @@ export async function loginPassword(
     return { kind: "mfa", challenge: body["mfa_required"] as MfaChallenge }
   }
 
+  /*
+    Since the TOTP and email factors were added, an account with two-step
+    sign-in and no trusted device gets a list of factors back from /login
+    instead of a challenge. The caller picks one and startMfa turns it into
+    the challenge that loginOtp answers.
+  */
+  if (body["mfa_options"]) {
+    const raw = body["mfa_options"] as Record<string, unknown>
+    const options = Array.isArray(raw["options"]) ? (raw["options"] as MfaOption[]) : []
+    const id = typeof raw["id"] === "string" ? raw["id"] : ""
+    if (id.length === 0 || options.length === 0) {
+      throw new LoginError("Login failed: two-step sign-in is required but no method is available", 502)
+    }
+    return { kind: "mfa_choice", choice: { id, options } }
+  }
+
   return { kind: "ok", session: parseLoginResponse(body) }
+}
+
+export async function startMfa(
+  baseUrl: string,
+  sessionId: string,
+  method: string,
+): Promise<MfaChallenge> {
+  const res = await fetch(`${baseUrl}/v1/login/mfa-start`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: sessionId, method }),
+  })
+
+  const body = await readLoginBody(res, "MFA failed")
+  const challenge = body["mfa_required"] as MfaChallenge | undefined
+  if (!challenge || typeof challenge.id !== "string" || challenge.id.length === 0) {
+    throw new LoginError("MFA failed: unexpected response", 502)
+  }
+  return challenge
 }
 
 export async function loginOtp(
@@ -147,8 +193,12 @@ export async function refreshAuthToken(baseUrl: string, token: string): Promise<
 }
 
 function parseLoginResponse(body: Record<string, unknown>): LoginSession {
+  const jwt = body["jwt"]
+  if (typeof jwt !== "string" || jwt.length === 0) {
+    throw new LoginError("Login failed: the API returned no session token", 502)
+  }
   return {
-    jwt: body["jwt"] as string,
+    jwt,
     refreshToken: body["refreshToken"] as string,
     email: body["email"] as string,
     userId: body["userId"] as string,

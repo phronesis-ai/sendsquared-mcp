@@ -1,4 +1,4 @@
-import { apiForRequest, envelope, asString, asOptString, asOptNumber } from "./shared.js"
+import { apiForRequest, envelope, asString, asOptString, asOptNumber, normalizeSort } from "./shared.js"
 import type { ToolDefinition } from "./types.js"
 import type { QueryParams } from "@sendsquared/client"
 
@@ -32,7 +32,7 @@ export const reservationsList: ToolDefinition = {
       },
       sort: {
         type: "array",
-        description: "Array of sort directives, e.g. ['arrival_date desc'] or ['-arrival_date'].",
+        description: "Array of sort directives as attribute:direction, e.g. ['arrival_date:desc']. 'arrival_date desc' and '-arrival_date' are accepted too.",
         items: { type: "string" },
       },
       tags: {
@@ -49,7 +49,7 @@ export const reservationsList: ToolDefinition = {
     const limit = asOptNumber(args["limit"]) ?? 100
     const after_id = asOptNumber(args["after_id"]) ?? 0
     const filter = Array.isArray(args["filter"]) ? (args["filter"] as string[]) : undefined
-    const sort = Array.isArray(args["sort"]) ? (args["sort"] as string[]) : undefined
+    const sort = normalizeSort(Array.isArray(args["sort"]) ? (args["sort"] as string[]) : undefined)
     const tags = Array.isArray(args["tags"]) ? (args["tags"] as number[]) : undefined
     const include_units = typeof args["include_units"] === "boolean" ? args["include_units"] : undefined
     const include_contact = typeof args["include_contact"] === "boolean" ? args["include_contact"] : undefined

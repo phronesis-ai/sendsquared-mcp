@@ -266,7 +266,7 @@ export const groupsAddContact: ToolDefinition = {
   handler: async (args) => {
     const groupId = asString(args["groupId"], "groupId")
     const contactId = asString(args["contactId"], "contactId")
-    await apiForRequest().post("/group-contacts", { groupId, contactId })
+    await apiForRequest().put(`/group-contacts/${encodeURIComponent(groupId)}`, [parseInt(contactId, 10)])
     return envelope(
       null,
       `Contact ${contactId} added to group ${groupId}`,
@@ -289,7 +289,7 @@ export const groupsRemoveContact: ToolDefinition = {
   handler: async (args) => {
     const groupId = asString(args["groupId"], "groupId")
     const contactId = asString(args["contactId"], "contactId")
-    await apiForRequest().delete(`/group-contacts/${encodeURIComponent(groupId)}/${encodeURIComponent(contactId)}`)
+    await apiForRequest().delete(`/group-contacts/${encodeURIComponent(groupId)}`, [parseInt(contactId, 10)])
     return envelope(
       null,
       `Contact ${contactId} removed from group ${groupId}`,

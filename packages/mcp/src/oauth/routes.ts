@@ -1,5 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto"
-import { Router, type Request, type Response } from "express"
+import { Router, type Request, type Response, type NextFunction } from "express"
 import rateLimit from "express-rate-limit"
 import {
   registerClient,
@@ -9,10 +9,11 @@ import {
   issueAccessToken,
   rotateRefreshToken,
   generateCsrfToken,
-  clientCount,
+  RegistryFullError,
 } from "./store.js"
-import { loginPassword, loginOtp, LoginError } from "@sendsquared/client"
-import { renderConsentPage, renderOtpPage, renderErrorPage, type ConsentParams } from "./consent.js"
+import { loginPassword, loginOtp, startMfa, LoginError, type MfaChallenge } from "@sendsquared/client"
+import { renderConsentPage, renderOtpPage, renderMfaChoicePage, renderErrorPage, type ConsentParams } from "./consent.js"
+import { asyncRoute } from "../asyncRoute.js"
 
 const SENDSQUARED_API_URL = process.env["SENDSQUARED_API_URL"] ?? "https://api.sendsquared.com"
 
@@ -43,8 +44,6 @@ const ALLOWED_REDIRECT_PATTERNS = [
   /^http:\/\/localhost(:\d+)?(\/|$)/,
   /^http:\/\/127\.0\.0\.1(:\d+)?(\/|$)/,
 ]
-
-const MAX_REGISTERED_CLIENTS = 500
 
 /*
   Other assistant platforms redirect to origins that are only known once they
@@ -77,7 +76,10 @@ async function lookupProfile(jwt: string): Promise<ProfileLookup> {
   const res = await fetch(`${SENDSQUARED_API_URL}/v1/user/`, {
     method: "GET",
     headers: { Authorization: `Bearer ${jwt}`, "Content-Type": "application/json" },
-  })
+  }).catch(() => undefined)
+  if (!res) {
+    return { ok: false, error: "SendSquared isn't reachable right now. Please try again in a few minutes." }
+  }
   if (res.status === 401 || res.status === 403) {
     return {
       ok: false,
@@ -148,25 +150,26 @@ function consumeCsrfToken(token: string): boolean {
   return true
 }
 
-const SKIP_RATE_LIMIT = process.env["NODE_ENV"] === "test"
+/*
+  The limiters are off under vitest so unrelated tests never trip them. The
+  rate limit suite turns them back on with ENFORCE_RATE_LIMITS=1.
+*/
+function skipRateLimit(): boolean {
+  return process.env["NODE_ENV"] === "test" && process.env["ENFORCE_RATE_LIMITS"] !== "1"
+}
 
 const registrationLimiter = rateLimit({
   windowMs: 60 * 1000,
   limit: 10,
   standardHeaders: "draft-7",
   legacyHeaders: false,
-  skip: () => SKIP_RATE_LIMIT,
+  skip: skipRateLimit,
   message: { error: "too_many_registrations", error_description: "Rate limit: max 10 client registrations per minute per IP" },
 })
 
 export const oauthRouter = Router()
 
 oauthRouter.post("/register", registrationLimiter, (req, res) => {
-  if (clientCount() >= MAX_REGISTERED_CLIENTS) {
-    jsonError(res, 503, "server_error", "Maximum number of registered clients reached. The server may need to be restarted to clear stale registrations.")
-    return
-  }
-
   const body = (req.body ?? {}) as Record<string, unknown>
   const redirect_uris = body["redirect_uris"]
 
@@ -191,10 +194,20 @@ oauthRouter.post("/register", registrationLimiter, (req, res) => {
     }
   }
 
-  const client = registerClient({
-    redirect_uris: redirect_uris as string[],
-    client_name: typeof body["client_name"] === "string" ? (body["client_name"] as string) : undefined,
-  })
+  let client
+  try {
+    client = registerClient({
+      redirect_uris: redirect_uris as string[],
+      client_name: typeof body["client_name"] === "string" ? (body["client_name"] as string) : undefined,
+    })
+  } catch (err) {
+    if (err instanceof RegistryFullError) {
+      console.log(`[oauth] register refused: ${err.message}`)
+      jsonError(res, 503, "server_error", "The sign-in service is at capacity. Please try again in a few minutes.")
+      return
+    }
+    throw err
+  }
 
   res.status(201).json({
     client_id: client.client_id,
@@ -212,7 +225,7 @@ const authorizeLimiter = rateLimit({
   limit: 20,
   standardHeaders: "draft-7",
   legacyHeaders: false,
-  skip: () => SKIP_RATE_LIMIT,
+  skip: skipRateLimit,
   message: { error: "too_many_requests", error_description: "Rate limit: max 20 authorization requests per minute per IP" },
 })
 
@@ -275,21 +288,38 @@ oauthRouter.get("/authorize", authorizeLimiter, (req, res) => {
   Only the JSON form lets us refresh silently. We tolerate both so existing
   setups keep working — they just expire and need re-paste on JWT death.
 */
+const JWT_SHAPE = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/
+
+/*
+  People paste whole terminal transcripts into this box: the chmod warning
+  above the token, the `claude mcp add` command, a URL. Anything that is not
+  a JWT would be sent as an Authorization header, and a header with a newline
+  in it makes fetch throw before the request leaves. Only a bare JWT, or the
+  JSON blob whose jwt field is one, gets through.
+*/
 function parsePastedToken(raw: string): { jwt: string; refreshToken: string | null } | null {
   const trimmed = raw.trim()
   if (trimmed.length === 0) return null
   if (trimmed.startsWith("{")) {
-    try {
-      const parsed = JSON.parse(trimmed) as Record<string, unknown>
-      const jwt = typeof parsed["jwt"] === "string" ? (parsed["jwt"] as string).trim() : ""
-      const rt = typeof parsed["refreshToken"] === "string" ? (parsed["refreshToken"] as string).trim() : ""
-      if (!jwt) return null
-      return { jwt, refreshToken: rt.length > 0 ? rt : null }
-    } catch {
-      return null
-    }
+    const parsed = parseJsonObject(trimmed)
+    if (!parsed) return null
+    const jwt = typeof parsed["jwt"] === "string" ? parsed["jwt"].trim() : ""
+    const rt = typeof parsed["refreshToken"] === "string" ? parsed["refreshToken"].trim() : ""
+    if (!JWT_SHAPE.test(jwt)) return null
+    return { jwt, refreshToken: rt.length > 0 ? rt : null }
   }
+  if (!JWT_SHAPE.test(trimmed)) return null
   return { jwt: trimmed, refreshToken: null }
+}
+
+function parseJsonObject(text: string): Record<string, unknown> | null {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    return null
+  }
+  return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null
 }
 
 interface AuthorizeRequest {
@@ -400,7 +430,7 @@ const signInLimiter = rateLimit({
   limit: 10,
   standardHeaders: "draft-7",
   legacyHeaders: false,
-  skip: () => SKIP_RATE_LIMIT,
+  skip: skipRateLimit,
   message: { error: "too_many_requests", error_description: "Too many sign-in attempts. Wait a minute and try again." },
 })
 
@@ -411,7 +441,7 @@ const signInLimiter = rateLimit({
   CLI. The password only passes through to the API; it is never logged or
   kept, and the request log records field names, not values.
 */
-oauthRouter.post("/authorize/submit", signInLimiter, async (req, res) => {
+oauthRouter.post("/authorize/submit", signInLimiter, asyncRoute(async (req, res) => {
   console.log(`[oauth] POST /authorize/submit content-type=${req.headers["content-type"]} body_keys=${Object.keys(req.body ?? {}).join(",")}`)
   const body = (req.body ?? {}) as Record<string, unknown>
   const request = authorizeRequestFrom(body)
@@ -440,6 +470,13 @@ oauthRouter.post("/authorize/submit", signInLimiter, async (req, res) => {
       case "mfa":
         sendPage(res, 200, renderOtpPage({ ...page, challenge_id: result.challenge.id, method: result.challenge.method }))
         return
+      case "mfa_choice":
+        if (result.choice.options.length === 1) {
+          await beginChallenge(res, page, result.choice.id, result.choice.options[0]!.method, result.choice.options)
+          return
+        }
+        sendPage(res, 200, renderMfaChoicePage({ ...page, session_id: result.choice.id, options: result.choice.options }))
+        return
       case "ok":
         redirectWithCode(res, request, {
           jwt: result.session.jwt,
@@ -453,7 +490,7 @@ oauthRouter.post("/authorize/submit", signInLimiter, async (req, res) => {
 
   const parsed = parsePastedToken(String(body["jwt"] ?? ""))
   if (!parsed) {
-    sendPage(res, 400, renderConsentPage({ ...page, error: "Enter your email and password, or paste a token from the SendSquared CLI." }))
+    sendPage(res, 400, renderConsentPage({ ...page, error: "Enter your email and password, or paste just the token from the SendSquared CLI, on one line." }))
     return
   }
   const profile = await lookupProfile(parsed.jwt)
@@ -467,9 +504,44 @@ oauthRouter.post("/authorize/submit", signInLimiter, async (req, res) => {
     user_email: profile.user_email!,
     user_id: profile.user_id!,
   })
-})
+}))
 
-oauthRouter.post("/authorize/otp", signInLimiter, async (req, res) => {
+/*
+  Turns the factor the user picked into a challenge and shows the code page.
+  When mfa-start rejects the pick, the choice page comes back with the error
+  so they can try another factor without re-entering the password.
+*/
+async function beginChallenge(res: Response, page: ConsentParams, sessionId: string, method: string, options: Array<{ method: string; context: string }>): Promise<void> {
+  let challenge: MfaChallenge
+  try {
+    challenge = await startMfa(SENDSQUARED_API_URL, sessionId, method)
+  } catch (err) {
+    const failure = signInFailure(err, "That sign-in option isn't available right now. Pick another one or start over.")
+    console.log(`[oauth] mfa-start failed: ${failure.detail}`)
+    sendPage(res, failure.status, renderMfaChoicePage({ ...page, session_id: sessionId, options, error: failure.message }))
+    return
+  }
+  sendPage(res, 200, renderOtpPage({ ...page, challenge_id: challenge.id, method: challenge.method }))
+}
+
+oauthRouter.post("/authorize/mfa-method", signInLimiter, asyncRoute(async (req, res) => {
+  console.log(`[oauth] POST /authorize/mfa-method body_keys=${Object.keys(req.body ?? {}).join(",")}`)
+  const body = (req.body ?? {}) as Record<string, unknown>
+  const request = authorizeRequestFrom(body)
+  const page = authorizeGate(request, res)
+  if (!page) {
+    return
+  }
+  const session_id = String(body["session_id"] ?? "")
+  const method = String(body["method"] ?? "")
+  if (session_id.length === 0 || method.length === 0) {
+    htmlError(res, 400, "Session expired. Please close this window and reconnect the SendSquared connector.")
+    return
+  }
+  await beginChallenge(res, page, session_id, method, [{ method, context: "" }])
+}))
+
+oauthRouter.post("/authorize/otp", signInLimiter, asyncRoute(async (req, res) => {
   console.log(`[oauth] POST /authorize/otp body_keys=${Object.keys(req.body ?? {}).join(",")}`)
   const body = (req.body ?? {}) as Record<string, unknown>
   const request = authorizeRequestFrom(body)
@@ -499,9 +571,9 @@ oauthRouter.post("/authorize/otp", signInLimiter, async (req, res) => {
     user_email: session.email,
     user_id: String(session.userId),
   })
-})
+}))
 
-oauthRouter.post("/token", async (req, res) => {
+oauthRouter.post("/token", asyncRoute(async (req, res) => {
   const body = (req.body ?? {}) as Record<string, unknown>
   const grant_type = String(body["grant_type"] ?? "")
 
@@ -582,6 +654,24 @@ oauthRouter.post("/token", async (req, res) => {
   }
 
   jsonError(res, 400, "unsupported_grant_type", `Grant type "${grant_type}" is not supported (use authorization_code or refresh_token)`)
+}))
+
+/*
+  Anything a sign-in handler throws lands here instead of taking the process
+  down. The user gets a page they can act on and the request log keeps the
+  cause; the token endpoint answers JSON because that is what its callers
+  parse.
+*/
+oauthRouter.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
+  console.error(`[oauth] handler failed on ${req.method} ${req.path}: ${err.stack ?? err.message}`)
+  if (res.headersSent) {
+    return
+  }
+  if (req.path === "/token") {
+    jsonError(res, 500, "server_error", "The sign-in server hit an unexpected error. Try again.")
+    return
+  }
+  htmlError(res, 500, "Something went wrong while signing you in. Please close this window and reconnect the SendSquared connector.")
 })
 
 const csrfSweepHandle = setInterval(() => {

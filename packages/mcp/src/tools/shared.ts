@@ -59,3 +59,20 @@ export function asOptBoolean(v: unknown): boolean | undefined {
   if (v === "false" || v === "0") return false
   return undefined
 }
+
+/*
+  The paginated list routes want "attribute:direction". Agents tend to write
+  SQL style ("arrival_date desc") or a leading minus ("-arrival_date"), and the
+  API rejects both, so every spelling is folded into the one it accepts.
+*/
+export function normalizeSort(sort: string[] | undefined): string[] | undefined {
+  if (!sort) return undefined
+  return sort.map((entry) => {
+    const trimmed = entry.trim()
+    if (trimmed.includes(":")) return trimmed
+    if (trimmed.startsWith("-")) return `${trimmed.slice(1)}:desc`
+    const [attribute, direction] = trimmed.split(/\s+/)
+    const dir = (direction ?? "asc").toLowerCase()
+    return `${attribute}:${dir === "desc" || dir === "descending" ? "desc" : "asc"}`
+  })
+}
